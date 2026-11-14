@@ -189,7 +189,7 @@ impl Foundry {
             mode: "survival".into(),
             difficulty: "normal".into(),
             resync_form: false,
-            addons_only: false,
+            addons_only: true,
             detail: None,
             install_open: None,
             purchase: None,

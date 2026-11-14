@@ -92,7 +92,8 @@ The pinned Rust toolchain is installed through rustup. For a release build, run
 ## Browse and buy add-ons
 
 Open **Marketplace** to browse listings with thumbnails, descriptions, and prices.
-Search by name or topic, use **Add-ons only**, and select **Next** for more results.
+It opens with **Add-ons only** selected. Select **Everything** to browse all product types.
+Search by name or topic and select **Next** for more results.
 Results show the newest listings first.
 Worlds, skin packs, and character creator products are viewable. Purchases and
 BDS installation are available for standalone add-ons.
