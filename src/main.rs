@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use bedrock_foundry::{backend::Backend, server};
+use bedrock_foundry::{backend::Backend, marketplace::CatalogQuery, server};
 use clap::{Parser, Subcommand};
 use std::{
     io::{BufRead, Write},
@@ -35,6 +35,11 @@ enum Command {
         #[command(subcommand)]
         action: AddonCommand,
     },
+    /// Browse and search Marketplace listings or read your Minecoin balance.
+    Marketplace {
+        #[command(subcommand)]
+        action: MarketplaceCommand,
+    },
     /// Create and manage Bedrock server instances.
     Server {
         #[command(subcommand)]
@@ -62,6 +67,28 @@ enum AddonCommand {
     Download {
         id: Uuid,
     },
+    /// Review an add-on's price. Spending requires --price and --confirm.
+    Buy {
+        id: Uuid,
+        #[arg(long)]
+        price: Option<u64>,
+        #[arg(long, requires = "price")]
+        confirm: bool,
+    },
+}
+#[derive(Subcommand)]
+enum MarketplaceCommand {
+    Browse {
+        #[arg(long, default_value = "")]
+        search: String,
+        #[arg(long)]
+        addons: bool,
+        #[arg(long, default_value_t = 0)]
+        skip: u64,
+        #[arg(long)]
+        json: bool,
+    },
+    Balance,
 }
 #[derive(Subcommand)]
 enum ServerCommand {
@@ -145,6 +172,32 @@ fn run() -> Result<()> {
                     AddonCommand::Sample=>{let addon=backend.sample().await?;println!("{}  {}  {}",addon.id,addon.name,if addon.owned{"Owned"}else{"Free"});},
                     AddonCommand::Claim{id}=>{backend.claim(id).await?;println!("Claim accepted. Refresh your library to see the entitlement.");},
                     AddonCommand::Download{id}=>{backend.refresh_library().await?;backend.download(id).await?;println!("Add-on downloaded");},
+                    AddonCommand::Buy{id,price,confirm}=>{
+                        let quote=backend.quote_purchase(id).await?;
+                        println!("{}: {} Minecoins. Balance: {} Minecoins.",quote.item.title,quote.amount,quote.balance);
+                        if confirm {
+                            anyhow::ensure!(price==Some(quote.amount),"The quoted price differs from --price. Review the purchase again.");
+                            let ready=backend.buy(quote.id).await?;
+                            println!("{}",if ready{"Purchase accepted. The add-on is ready to download."}else{"Purchase accepted. Refresh your library to check entitlement delivery. Do not repeat the purchase."});
+                        } else {
+                            println!("No purchase made. To confirm: addon buy {id} --price {} --confirm",quote.amount);
+                        }
+                    },
+                }
+            },
+            Command::Marketplace{action}=>{
+                backend.restore().await?;
+                match action {
+                    MarketplaceCommand::Balance=>println!("{} Minecoins",backend.refresh_balance().await?),
+                    MarketplaceCommand::Browse{search,addons,skip,json}=>{
+                        backend.search_catalog(CatalogQuery{search,addons_only:addons,skip}).await?;
+                        let page=backend.catalog.as_ref().context("Catalog did not load")?;
+                        if json {println!("{}",serde_json::to_string_pretty(page)?);} else {
+                            for item in &page.items {println!("{}  {}  [{}]  {}",item.id,item.title,item.kind,item.price_label());}
+                            println!("{} listings. Total: {}.",page.items.len(),page.total);
+                            if let Some(next)=page.next_skip {println!("Next page: repeat this query with --skip {next}");}
+                        }
+                    }
                 }
             },
             Command::Server{action}=>match action {

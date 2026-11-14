@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::PathBuf};
 use uuid::Uuid;
 
+mod commerce;
+
 #[derive(Serialize, Deserialize)]
 struct Identity {
     device: Uuid,
@@ -26,6 +28,9 @@ pub struct Backend {
     pub processes: Processes,
     pub library: Vec<Addon>,
     pub available: HashMap<Uuid, CachedAddon>,
+    pub catalog: Option<marketplace::CatalogPage>,
+    pub wallet: Option<u64>,
+    pub purchase_quote: Option<marketplace::PurchaseQuote>,
 }
 impl Backend {
     pub fn open(root: Option<PathBuf>) -> Result<Self> {
@@ -56,6 +61,9 @@ impl Backend {
             processes: Processes::default(),
             library: vec![],
             available,
+            catalog: None,
+            wallet: None,
+            purchase_quote: None,
         })
     }
     pub fn servers(&self) -> Result<Vec<ServerConfig>> {
@@ -95,6 +103,7 @@ impl Backend {
         let result = marketplace::list(services, &self.http).await;
         self.accounts.persist()?;
         self.library = result?;
+        self.reconcile_owned_purchases().await?;
         Ok(self.library.clone())
     }
     pub async fn sample(&mut self) -> Result<Addon> {
@@ -118,6 +127,19 @@ impl Backend {
         result
     }
     pub async fn download(&mut self, id: Uuid) -> Result<()> {
+        if !self.library.iter().any(|addon| addon.id == id) {
+            let services = self
+                .accounts
+                .services
+                .as_mut()
+                .context("Connect your Microsoft account first")?;
+            let item = marketplace::published_item(services, &self.http, id).await?;
+            ensure!(item.owned, "This account does not own this add-on");
+            self.library.push(
+                item.addon
+                    .context("This listing is not a standalone add-on")?,
+            );
+        }
         let addon = self
             .library
             .iter()

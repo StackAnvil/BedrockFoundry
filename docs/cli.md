@@ -27,8 +27,43 @@ bedrock-foundry addon download ADDON_ID
 ```
 
 `sample` shows the free Poisonous Potato Add-On. `claim` refuses offers whose
-current catalog price is not zero. Foundry does not make paid purchases. Buy paid
-add-ons through Minecraft before refreshing the owned library.
+current catalog price is not zero.
+
+## Browse the Marketplace
+
+```sh
+bedrock-foundry marketplace browse
+bedrock-foundry marketplace browse --search dragons
+bedrock-foundry marketplace browse --addons --search furniture
+bedrock-foundry marketplace browse --addons --skip 24 --json
+bedrock-foundry marketplace balance
+```
+
+Browsing returns one page of public listings. Repeat the same query with the
+printed next offset to see more. `--json` includes descriptions, prices, ownership,
+and the next offset. Other product types are viewable but cannot be bought or
+installed here.
+
+Review an add-on without spending Minecoins:
+
+```sh
+bedrock-foundry addon buy ADDON_ID
+```
+
+To buy it, repeat the command with its exact reviewed price and `--confirm`:
+
+```sh
+bedrock-foundry addon buy ADDON_ID --price 490 --confirm
+```
+
+Replace `490` with the quoted price. The app rejects a changed offer, expired quote,
+different account, or insufficient balance. It re-reads the offer and balance before
+submitting. Minecoin purchases cannot be undone through Foundry.
+
+After an unknown outcome, do not repeat the purchase. Refresh `addon list` and check
+the purchase in Minecraft. Foundry retains a record for that account and offer and
+blocks another attempt until ownership is confirmed. An accepted purchase remains
+accepted if the later library refresh fails. Refresh the library to collect it.
 
 ## Create and run a server
 

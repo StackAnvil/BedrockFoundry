@@ -13,6 +13,15 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
+mod browse;
+mod purchase;
+pub(crate) use browse::published as published_item;
+pub use browse::{
+    CatalogItem, CatalogPage, CatalogQuery, Ownership, PAGE_SIZE, browse, receipt_ownership,
+};
+pub(crate) use purchase::{PurchaseAttempt, submit_purchase};
+pub use purchase::{PurchaseQuote, TransactionFailure, minecoin_balance};
+
 const INVENTORY: &str = "https://entitlements.mktpl.minecraft-services.net/api/v1.0/player/inventory?includeReceipt=true";
 const CATALOG: &str = "https://20ca2.playfabapi.com/Catalog/";
 pub const POTATO: &str = "790be090-9bce-4870-85e7-cd868402c3e5";
@@ -26,7 +35,7 @@ pub struct Addon {
     pub packs: Vec<PackIdentity>,
     pub price: Option<u64>,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PackIdentity {
     pub uuid: Uuid,
     pub version: [u32; 3],
@@ -37,6 +46,7 @@ pub fn client() -> Result<Client> {
     Ok(Client::builder()
         .https_only(true)
         .redirect(reqwest::redirect::Policy::none())
+        .retry(reqwest::retry::never())
         .connect_timeout(Duration::from_secs(15))
         .read_timeout(Duration::from_secs(30))
         .timeout(Duration::from_secs(180))
@@ -92,12 +102,24 @@ struct Entitlement {
     amount: u64,
     expiration_date: Option<String>,
     start_date: Option<String>,
+    #[serde(default, deserialize_with = "null_offer_ids")]
+    offer_ids: Vec<Uuid>,
 }
 
-pub fn receipt_keys(
-    encoded: &str,
-    now: OffsetDateTime,
-) -> Result<HashMap<Uuid, Zeroizing<Vec<u8>>>> {
+fn null_offer_ids<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<Vec<Uuid>, D::Error> {
+    Ok(Option::<Vec<Uuid>>::deserialize(deserializer)?.unwrap_or_default())
+}
+
+#[cfg(test)]
+mod tests;
+
+fn decode_receipt(encoded: &str) -> Result<Receipt> {
+    ensure!(
+        encoded.len() <= 12 * 1024 * 1024,
+        "Entitlement receipt exceeds the size limit"
+    );
     let bytes = Zeroizing::new(
         STANDARD
             .decode(encoded)
@@ -107,7 +129,37 @@ pub fn receipt_keys(
         bytes.len() <= 8 * 1024 * 1024,
         "Entitlement receipt exceeds the size limit"
     );
-    let receipt: Receipt = serde_json::from_slice(&bytes).context("Invalid entitlement receipt")?;
+    serde_json::from_slice(&bytes).context("Invalid entitlement receipt")
+}
+
+fn active(entitlement: &Entitlement, now: OffsetDateTime) -> Result<bool> {
+    if entitlement.amount == 0 {
+        return Ok(false);
+    }
+    if let Some(date) = entitlement
+        .expiration_date
+        .as_ref()
+        .filter(|d| !d.starts_with("0001-"))
+        && OffsetDateTime::parse(date, &Rfc3339).context("Invalid entitlement expiry")? <= now
+    {
+        return Ok(false);
+    }
+    if let Some(date) = entitlement
+        .start_date
+        .as_ref()
+        .filter(|d| !d.starts_with("0001-"))
+        && OffsetDateTime::parse(date, &Rfc3339).context("Invalid entitlement start date")? > now
+    {
+        return Ok(false);
+    }
+    Ok(true)
+}
+
+pub fn receipt_keys(
+    encoded: &str,
+    now: OffsetDateTime,
+) -> Result<HashMap<Uuid, Zeroizing<Vec<u8>>>> {
+    let receipt = decode_receipt(encoded)?;
     let entity = receipt.entity_id.as_bytes();
     let device = receipt.receipt_data.device_id.as_bytes();
     ensure!(
@@ -116,21 +168,7 @@ pub fn receipt_keys(
     );
     let mut result = HashMap::new();
     for entitlement in receipt.entitlement_receipts {
-        if entitlement.amount == 0 {
-            continue;
-        }
-        if let Some(expiration) = entitlement
-            .expiration_date
-            .filter(|d| !d.starts_with("0001-"))
-            && OffsetDateTime::parse(&expiration, &Rfc3339).context("Invalid entitlement expiry")?
-                <= now
-        {
-            continue;
-        }
-        if let Some(start) = entitlement.start_date.filter(|d| !d.starts_with("0001-"))
-            && OffsetDateTime::parse(&start, &Rfc3339).context("Invalid entitlement start date")?
-                > now
-        {
+        if !active(&entitlement, now)? {
             continue;
         }
         let Some(encoded) = entitlement.content_key.filter(|s| !s.is_empty()) else {
@@ -154,6 +192,13 @@ async fn inventory(
     services: &mut Minecraft,
     http: &Client,
 ) -> Result<HashMap<Uuid, Zeroizing<Vec<u8>>>> {
+    receipt_keys(
+        &inventory_receipt(services, http).await?,
+        OffsetDateTime::now_utc(),
+    )
+}
+
+async fn inventory_receipt(services: &mut Minecraft, http: &Client) -> Result<Zeroizing<String>> {
     let auth = services.authorize().await?;
     let response = http
         .get(INVENTORY)
@@ -166,12 +211,12 @@ async fn inventory(
         services.reject(&auth);
     }
     let inventory = json_response(response).await?;
-    receipt_keys(
+    Ok(Zeroizing::new(
         inventory["result"]["receipt"]
             .as_str()
-            .context("Inventory has no receipt")?,
-        OffsetDateTime::now_utc(),
-    )
+            .context("Inventory has no receipt")?
+            .to_owned(),
+    ))
 }
 
 async fn catalog(
@@ -209,6 +254,12 @@ fn version(value: &str) -> Result<[u32; 3]> {
         .map_err(|_| anyhow::anyhow!("Catalog has an invalid pack version"))
 }
 pub fn parse_addon(value: &Value, owned: &HashSet<Uuid>) -> Result<Option<Addon>> {
+    if !value["Tags"]
+        .as_array()
+        .is_some_and(|tags| tags.iter().any(|tag| tag.as_str() == Some("addon")))
+    {
+        return Ok(None);
+    }
     let Some(identities) = value["DisplayProperties"]["packIdentity"].as_array() else {
         return Ok(None);
     };
@@ -272,26 +323,21 @@ pub async fn list(services: &mut Minecraft, http: &Client) -> Result<Vec<Addon>>
             .map(|id| format!("tags/any(t:t eq '{id}')"))
             .collect::<Vec<_>>()
             .join(" or ");
-        let mut continuation: Option<String> = None;
         for page in 0..20 {
-            let mut body = json!({"Top":50,"Filter":filter});
-            if let Some(token) = &continuation {
-                body["ContinuationToken"] = json!(token);
-            }
+            let body = json!({"Top":50,"Skip":page*50,"Filter":filter,"OrderBy":"id asc"});
             let response = catalog(services, http, "Search", body, true).await?;
-            for item in response["data"]["Items"]
+            let records = response["data"]["Items"]
                 .as_array()
-                .context("Catalog search has no items")?
-            {
+                .context("Catalog search has no items")?;
+            for item in records {
                 if let Some(addon) = parse_addon(item, &owned)?.filter(|a| a.owned) {
                     items.insert(addon.id, addon);
                 }
             }
-            continuation = response["data"]["ContinuationToken"]
-                .as_str()
-                .filter(|s| !s.is_empty())
-                .map(str::to_owned);
-            if continuation.is_none() {
+            let total = response["data"]["Count"]
+                .as_u64()
+                .context("Catalog search has no total count")?;
+            if records.is_empty() || page * 50 + records.len() as u64 >= total {
                 break;
             }
             ensure!(
