@@ -1,3 +1,9 @@
 /target/
 /.private/
 *.log
+/dist/
+/third-party-licenses.html
+__pycache__/
+.venv/
+.DS_Store
+Thumbs.db

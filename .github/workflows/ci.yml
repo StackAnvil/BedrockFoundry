@@ -1,35 +1,71 @@
 name: CI
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Exact source revision to check for a release.
+        type: string
+        required: false
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
-  linux:
+  quality:
+    name: Formatting and workflow checks
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - name: Install native dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake clang libclang-dev pkg-config libasound2-dev libfontconfig1-dev libfreetype6-dev libx11-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libvulkan-dev
-      - name: Install Rust
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - name: Install pinned Rust toolchain
         run: rustup show
       - name: Format
         run: cargo fmt --all --check
+      - name: Validate workflows
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color
+      - name: Test release packaging
+        run: python -m unittest discover -s tools -p 'test_*.py'
+      - name: Validate release notes
+        run: python tools/release.py notes > /dev/null
+  test:
+    name: ${{ matrix.check }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: Linux
+            check: linux
+          - os: windows-latest
+            platform: Windows
+            check: windows
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup
       - name: Clippy
         run: cargo clippy --locked --all-targets -- -D warnings
-      - name: Tests
+      - name: Test desktop and core
         run: cargo test --locked --all-targets
-      - name: Build desktop
+      - name: Check CLI without desktop dependencies
+        run: cargo check --locked --no-default-features
+      - name: Build desktop executable
         run: cargo build --locked
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Rust
-        run: rustup show
-      - name: Test core
-        run: cargo test --locked --no-default-features
-      - name: Build desktop
-        run: cargo check --locked
+      - name: Verify executable version
+        shell: bash
+        run: ./target/debug/bedrock-foundry --version

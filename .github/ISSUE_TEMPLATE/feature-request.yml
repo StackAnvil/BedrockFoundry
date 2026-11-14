@@ -1,0 +1,22 @@
+name: Feature request
+description: Describe a task that Foundry does not handle yet.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: task
+    attributes:
+      label: What are you trying to do?
+      description: Describe the task and the current limitation.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Explain how the feature would help complete that task.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or related tools
