@@ -12,7 +12,12 @@ This is an early release. Local hosting targets Windows and Linux. See the
 
 ## Run the app
 
-Install the native dependencies in the [build guide](docs/development.md), then run:
+Download the Linux or Windows archive from [Releases](https://github.com/StackAnvil/BedrockFoundry/releases/latest).
+Extract it and run `bedrock-foundry` on Linux or `bedrock-foundry.exe` on Windows.
+The [release guide](docs/releases.md#verify-a-download) explains checksum verification.
+Linux archives target Ubuntu 24.04 or a compatible system with a Vulkan driver.
+
+To build from source, install the native dependencies in the [build guide](docs/development.md), then run:
 
 ```sh
 git clone https://github.com/StackAnvil/BedrockFoundry.git
@@ -21,8 +26,7 @@ cargo run --locked
 ```
 
 The pinned Rust toolchain is installed through rustup. For a release build, run
-`cargo build --locked --release`. The executable is `target/release/bedrock-foundry`
-on Linux and `target/release/bedrock-foundry.exe` on Windows.
+`cargo build --locked --release`.
 
 ## Set up a server
 
@@ -48,6 +52,11 @@ New instances bind to this computer only. Stop the server and select
 **Allow network connections** to accept connections from other computers.
 [The hosting guide](docs/hosting.md) explains NetherNet ports, router forwarding,
 and connections behind carrier-grade NAT.
+
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for checks, issue reports, and pull requests.
+The [release guide](docs/releases.md) covers version tags and automated publishing.
 
 ## License
 

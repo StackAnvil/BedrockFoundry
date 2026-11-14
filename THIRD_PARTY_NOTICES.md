@@ -2,7 +2,8 @@
 
 Bedrock Foundry's original source code is MIT licensed. Cargo dependencies retain
 the licenses declared by their authors. `Cargo.lock` records the exact dependency
-versions used by this application. No GPL or LGPL source from StackAnvil's Java
+versions used by this application. Release archives include
+`third-party-licenses.html` with the dependency license texts collected by cargo-about. No GPL or LGPL source from StackAnvil's Java
 patches is included in this repository.
 
 ## Bedrock Services

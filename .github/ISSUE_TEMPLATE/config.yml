@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Setup and hosting guide
+    url: https://github.com/StackAnvil/BedrockFoundry/blob/main/docs/hosting.md
+    about: Read the connection, port forwarding, and backup instructions.
+  - name: Private security report
+    url: https://github.com/StackAnvil/BedrockFoundry/security/advisories/new
+    about: Report a vulnerability without exposing credentials or exploit details publicly.

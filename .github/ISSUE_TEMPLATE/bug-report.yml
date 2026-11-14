@@ -1,0 +1,47 @@
+name: Bug report
+description: Report a reproducible desktop, Marketplace, or server problem.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not attach account files, content keys, Marketplace archives, or unredacted captures. Report vulnerabilities privately through the Security tab.
+  - type: input
+    id: version
+    attributes:
+      label: Bedrock Foundry version
+      description: Use the release version or the full source commit.
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Operating system
+      options: [Linux, Windows]
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: System and BDS versions
+      placeholder: Ubuntu 24.04, BDS 1.26.63.1
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include the smallest reproduction and whether you used the desktop or CLI.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant redacted logs
+      description: Include only the lines needed to explain the failure. Remove tokens and private account information.
+      render: text

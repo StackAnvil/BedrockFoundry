@@ -21,11 +21,16 @@ cargo fmt --all --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked --all-targets
 cargo build --locked
+python3 -m unittest discover -s tools -p 'test_*.py'
 ```
 
 Run focused tests first. Test observable archive admission, entitlement checks,
 world activation, recovery, configuration, and process ownership. A unit test does
 not establish native rendering or multiplayer compatibility.
+
+Release tags must match Cargo.toml and the changelog. Keep release archives limited
+to the executable, documented public files, provenance, and dependency licenses.
+Run actionlint when workflows change and the packaging tests when release tools change.
 
 ## Licensing
 

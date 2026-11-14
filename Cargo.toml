@@ -6,6 +6,7 @@ rust-version = "1.100"
 license = "MIT"
 description = "Set up Bedrock servers with your Marketplace add-ons."
 repository = "https://github.com/StackAnvil/BedrockFoundry"
+publish = false
 
 [features]
 default = ["desktop"]
@@ -36,7 +37,6 @@ uuid = { version = "1", features = ["v4", "serde"] }
 zeroize = "1"
 zip = { version = "4", default-features = false, features = ["deflate"] }
 
-[dev-dependencies]
 
 [profile.dev]
 debug = 0
