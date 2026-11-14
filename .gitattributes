@@ -3,3 +3,5 @@
 *.ico binary
 *.zip binary
 *.gz binary
+*.gif binary
+*.mp4 binary
