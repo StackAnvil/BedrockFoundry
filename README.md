@@ -10,6 +10,50 @@ commands, change settings, and create backups from the same window.
 This is an early release. Local hosting targets Windows and Linux. See the
 [compatibility notes](docs/compatibility.md) for tested behavior and current limits.
 
+## Demos
+
+These clips show v0.1.0 with a separate demo server. Sign-in and BDS import
+happen before the add-on demo. Account details are hidden.
+
+### Create and configure a server
+
+https://github.com/user-attachments/assets/a2a869f9-dbe3-4c64-bc3e-12f08dfbf5b5
+
+[Download MP4 (9 seconds)](docs/media/create-server.mp4)
+
+<details>
+<summary>GIF preview</summary>
+
+![Creating a server, changing its player limit and difficulty, and saving the settings.](docs/media/create-server.gif)
+
+</details>
+
+### Install a Marketplace add-on
+
+https://github.com/user-attachments/assets/533b336a-da15-4f9d-b8d5-a43ffa9da5b9
+
+[Download MP4 (8 seconds)](docs/media/install-addon.mp4)
+
+<details>
+<summary>GIF preview</summary>
+
+![Refreshing the owned library, downloading Poisonous Potato Add-On, and installing it in the selected server.](docs/media/install-addon.gif)
+
+</details>
+
+### Run, use the console, and back up
+
+https://github.com/user-attachments/assets/47a2778c-5fbc-4e92-b48a-a22ab398ef7b
+
+[Download MP4 (13 seconds)](docs/media/manage-server.mp4)
+
+<details>
+<summary>GIF preview</summary>
+
+![Starting the server, sending a console command, stopping it, and creating a backup.](docs/media/manage-server.gif)
+
+</details>
+
 ## Run the app
 
 Download the Linux or Windows archive from [Releases](https://github.com/StackAnvil/BedrockFoundry/releases/latest).

@@ -23,6 +23,9 @@ PLATFORMS = {
 PUBLIC_FILES = (
     "LICENSE", "README.md", "THIRD_PARTY_NOTICES.md", "CONTRIBUTING.md", "CHANGELOG.md",
     "docs/cli.md", "docs/compatibility.md", "docs/development.md", "docs/hosting.md", "docs/releases.md",
+    "docs/media/create-server.mp4", "docs/media/create-server.gif",
+    "docs/media/install-addon.mp4", "docs/media/install-addon.gif",
+    "docs/media/manage-server.mp4", "docs/media/manage-server.gif",
 )
 VERSION = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?")
 
