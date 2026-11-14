@@ -5,14 +5,17 @@ Set up Bedrock servers with your Marketplace add-ons.
 Bedrock Foundry is a Rust desktop application built with [GPUI](https://gpui.rs/).
 Connect your Microsoft account, download add-ons that you own, and install them
 in a Bedrock Dedicated Server (BDS) instance. Start and stop servers, send console
-commands, change settings, and create backups from the same window.
+commands, change settings, and create backups from the same window. Browse and
+search Marketplace listings, check your Minecoin balance, and buy standalone
+add-ons after reviewing the price.
 
 This is an early release. Local hosting targets Windows and Linux. See the
 [compatibility notes](docs/compatibility.md) for tested behavior and current limits.
 
 ## Demos
 
-These clips show v0.1.0 with a separate demo server. Sign-in and BDS import
+These clips show the original v0.1.0 release, before the desktop redesign.
+They use a separate demo server. Sign-in and BDS import
 happen before the add-on demo. Account details are hidden.
 
 ### Create and configure a server
@@ -56,6 +59,9 @@ https://github.com/user-attachments/assets/47a2778c-5fbc-4e92-b48a-a22ab398ef7b
 
 ## Run the app
 
+Build from `main` for the Marketplace browser, Minecoin purchases, and redesigned
+desktop. The downloadable v0.1.0 release uses the original interface shown in the demos.
+
 Download the Linux or Windows archive from [Releases](https://github.com/StackAnvil/BedrockFoundry/releases/latest).
 Extract it and run `bedrock-foundry` on Linux or `bedrock-foundry.exe` on Windows.
 The [release guide](docs/releases.md#verify-a-download) explains checksum verification.
@@ -74,14 +80,32 @@ The pinned Rust toolchain is installed through rustup. For a release build, run
 
 ## Set up a server
 
-1. Open **Microsoft account** and select **Connect Microsoft account**.
+1. Open **Microsoft account** and select **Sign in with Microsoft**.
 2. Complete sign-in on the Microsoft page with the displayed code.
-3. Open **Marketplace add-ons** and select **Refresh library**.
+3. Open **My add-ons** and select **Refresh**.
 4. Download an add-on that you own. **Try a free add-on** offers a free sample.
-5. Open **Servers**, enter a name and port, and select **Create server**.
-6. Select **Download and install BDS**. You can also import an official BDS ZIP.
-7. Select the server, return to the library, and install the downloaded add-on.
-8. Return to **Servers** and select **Start server**.
+5. Select **New server**, enter a name and port, and select **Create server**.
+6. Select **Download and install**. You can also import an official BDS ZIP.
+7. Open the server's **Add-ons** tab and install the downloaded add-on.
+8. Select **Start server**. The **Console**, **Settings**, and **Backups** tabs manage that server.
+
+## Browse and buy add-ons
+
+Open **Marketplace** to browse listings with thumbnails, descriptions, and prices.
+Search by name or topic, use **Add-ons only**, and select **Next** for more results.
+Results show the newest listings first.
+Worlds, skin packs, and character creator products are viewable. Purchases and
+BDS installation are available for standalone add-ons.
+
+Select an add-on, then **Buy…** to review its current price and your Minecoin balance.
+Confirm with **Buy for N Minecoins** to spend that amount from the connected account.
+The app checks the offer and balance again before submitting. Add Minecoins through
+Minecraft if your balance is too low. Foundry does not buy currency with real money.
+
+If a purchase has an unknown outcome, refresh **My add-ons** and check it in Minecraft.
+Foundry records the attempt and blocks another purchase of that offer until ownership
+is confirmed. It does not automatically retry a purchase. Offers with unverified or
+conflicting prices must be bought in Minecraft.
 
 BDS downloads come from Mojang. Review the [Minecraft EULA](https://www.minecraft.net/eula)
 before downloading or running the server software. Foundry does not include a server binary.
@@ -92,8 +116,8 @@ describes commands for terminal use and separate data directories.
 
 ## Connect other players
 
-New instances bind to this computer only. Stop the server and select
-**Allow network connections** to accept connections from other computers.
+New instances bind to this computer only. Stop the server and enable network
+access in its **Settings** tab to accept connections from other computers.
 [The hosting guide](docs/hosting.md) explains NetherNet ports, router forwarding,
 and connections behind carrier-grade NAT.
 

@@ -18,11 +18,17 @@ add-on, subscription product, or world template.
 
 ## Supported operations
 
-The desktop and CLI provide account sign-in, owned add-on discovery, free sample
+The desktop and CLI provide account sign-in, paged Marketplace browsing and search,
+Minecoin balances, confirmed add-on purchases, owned add-on discovery, free sample
 acquisition, download and decryption, server creation, BDS installation, pack
 activation, process control, console input, configuration, and stopped-server
 backups. The desktop can import an official BDS ZIP when automatic download is
 unavailable. Local BDS hosting targets Windows and Linux.
+
+Live read-only checks cover public catalog paging, search, add-on filtering,
+ownership, balances, and purchase review. Paid purchases were not executed in these
+checks. Synthetic tests cover the request amount, changed offers, insufficient
+balances, ambiguous responses, and duplicate attempts after restart.
 
 Archive validation bounds download size, expanded size, nested pack count, and
 file count. It rejects traversal paths, symbolic links, ambiguous duplicate
@@ -33,6 +39,10 @@ external pack activation entries and rolls back an unfinished journal on startup
 ## Current limits
 
 - World templates and skin-only products do not appear in the add-on library.
+  They remain viewable in the Marketplace catalog.
+- Only standalone add-ons with a matching, verified Minecoin price can be purchased.
+  Real-money currency purchases, refunds, and offers with conflicting store or sale
+  prices are not supported. Buy those through Minecraft.
 - Automatic BDS upgrades, add-on updates, add-on removal, and backup restoration
   are not implemented in the desktop.
 - Pack-to-pack dependency versions are checked. Script API dependencies remain
