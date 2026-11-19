@@ -188,28 +188,10 @@ const BINARY: &str = "bedrock_server.exe";
 #[cfg(not(windows))]
 const BINARY: &str = "bedrock_server";
 
-pub async fn download_server(
-    root: &Path,
-    config: &mut ServerConfig,
-    http: &reqwest::Client,
-) -> Result<()> {
-    ensure!(
-        cfg!(any(target_os = "linux", target_os = "windows")),
-        "Local BDS hosting is supported on Windows and Linux"
-    );
-    ensure!(
-        config.version.is_none(),
-        "This server is already installed. Back it up before installing a different BDS version."
-    );
-    let metadata = bounded_response(
-        http.get("https://net-secondary.web.minecraft-services.net/api/v1.0/download/links")
-            .send()
-            .await
-            .map_err(reqwest::Error::without_url)?,
-        1024 * 1024,
-    )
-    .await?;
-    let metadata: serde_json::Value = serde_json::from_slice(&metadata)?;
+/// Reads the official BDS download URL and version for this platform from the
+/// download service's link metadata.
+pub fn distribution_link(metadata: &[u8]) -> Result<(reqwest::Url, String)> {
+    let metadata: serde_json::Value = serde_json::from_slice(metadata)?;
     let platform = if cfg!(windows) {
         "serverBedrockWindows"
     } else {
@@ -248,6 +230,31 @@ pub async fn download_server(
         version.split('.').count() == 4 && version.chars().all(|c| c.is_ascii_digit() || c == '.'),
         "BDS download has an invalid version"
     );
+    Ok((url, version))
+}
+
+pub async fn download_server(
+    root: &Path,
+    config: &mut ServerConfig,
+    http: &reqwest::Client,
+) -> Result<()> {
+    ensure!(
+        cfg!(any(target_os = "linux", target_os = "windows")),
+        "Local BDS hosting is supported on Windows and Linux"
+    );
+    ensure!(
+        config.version.is_none(),
+        "This server is already installed. Back it up before installing a different BDS version."
+    );
+    let metadata = bounded_response(
+        http.get("https://net-secondary.web.minecraft-services.net/api/v1.0/download/links")
+            .send()
+            .await
+            .map_err(reqwest::Error::without_url)?,
+        1024 * 1024,
+    )
+    .await?;
+    let (url, version) = distribution_link(&metadata)?;
     let bytes = bounded_response(
         http.get(url)
             .send()

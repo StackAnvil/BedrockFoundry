@@ -205,6 +205,54 @@ fn refuses_credentials_and_arbitrary_hosts_in_catalog_downloads() {
         .expect("Catalog rejected the allowed asset URL");
 }
 #[test]
+fn selects_the_add_on_binary_from_catalog_contents() {
+    let item = json!({"Contents":[
+        {"Type":"skinbinary","Url":"https://xforgeassets001.xboxlive.com/skins.zip"},
+        {"Type":"resourcebinary","Url":"https://content1.prod.catalog.playfab.com/addon.zip"}]});
+    let url = marketplace::download_url(&item).unwrap();
+    assert_eq!(
+        url.as_str(),
+        "https://content1.prod.catalog.playfab.com/addon.zip"
+    );
+    let unsupported =
+        json!({"Contents":[{"Type":"resourcebinary","Url":"https://attacker.test/addon.zip"}]});
+    assert!(
+        marketplace::download_url(&unsupported).is_err(),
+        "accepted an unsupported asset host"
+    );
+}
+#[test]
+fn reads_the_official_bds_download_for_this_platform() {
+    let links = |windows: &str, linux: &str| {
+        serde_json::to_vec(&json!({"result":{"links":[
+            {"downloadType":"serverBedrockWindows","downloadUrl":windows},
+            {"downloadType":"serverBedrockLinux","downloadUrl":linux}]}}))
+        .unwrap()
+    };
+    let (url, version) = server::distribution_link(&links(
+        "https://www.minecraft.net/bedrockdedicatedserver/bin-win/bedrock-server-1.21.0.1.zip",
+        "https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-1.21.0.2.zip",
+    ))
+    .unwrap();
+    let (directory, expected) = if cfg!(windows) {
+        ("bin-win", "1.21.0.1")
+    } else {
+        ("bin-linux", "1.21.0.2")
+    };
+    assert!(url.path().contains(directory), "wrong platform: {url}");
+    assert_eq!(version, expected);
+    for url in [
+        "https://attacker.test/bedrockdedicatedserver/bedrock-server-1.21.0.1.zip",
+        "https://www.minecraft.net/other/bedrock-server-1.21.0.1.zip",
+        "https://www.minecraft.net/bedrockdedicatedserver/bedrock-server-1.21.zip",
+    ] {
+        assert!(
+            server::distribution_link(&links(url, url)).is_err(),
+            "accepted {url}"
+        );
+    }
+}
+#[test]
 fn preserves_custom_server_properties_and_prevents_line_injection() {
     let mut config = ServerConfig::new("Friends".into(), 19132).unwrap();
     let properties = config

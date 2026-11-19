@@ -422,6 +422,21 @@ pub fn validate_asset_url(url: &str) -> Result<Url> {
     Ok(url)
 }
 
+/// Selects the add-on download from a published catalog item and validates its URL.
+pub fn download_url(item: &Value) -> Result<Url> {
+    let content = item["Contents"]
+        .as_array()
+        .context("Catalog has no downloadable content")?
+        .iter()
+        .find(|c| c["Type"].as_str() == Some("resourcebinary"))
+        .context("No supported add-on download is available")?;
+    validate_asset_url(
+        content["Url"]
+            .as_str()
+            .context("Catalog download has no URL")?,
+    )
+}
+
 pub async fn download(
     services: &mut Minecraft,
     http: &Client,
@@ -452,17 +467,7 @@ pub async fn download(
             == addon.packs.iter().map(|p| (p.uuid, p.version)).collect(),
         "The add-on changed. Refresh your library before downloading."
     );
-    let content = item["Contents"]
-        .as_array()
-        .context("Catalog has no downloadable content")?
-        .iter()
-        .find(|c| c["Type"].as_str() == Some("resourcebinary"))
-        .context("No supported add-on download is available")?;
-    let url = validate_asset_url(
-        content["Url"]
-            .as_str()
-            .context("Catalog download has no URL")?,
-    )?;
+    let url = download_url(item)?;
     let response = http
         .get(url)
         .header("User-Agent", "libhttpclient/1.0.0.0")
