@@ -5,7 +5,7 @@ use bedrock_foundry::marketplace::Addon;
 
 impl Foundry {
     /// Every server with its install state for one downloaded add-on.
-    pub(super) fn install_targets(&mut self, addon: Uuid, cx: &mut Context<Self>) -> Div {
+    pub(super) fn install_targets(&self, addon: Uuid, cx: &Context<Self>) -> Div {
         let busy = self.busy();
         let mut list = div().flex().flex_col().gap_1();
         if self.data.servers.is_empty() {
@@ -78,7 +78,7 @@ impl Foundry {
         list
     }
 
-    fn addon_row(&mut self, addon: &Addon, cx: &mut Context<Self>) -> Div {
+    fn addon_row(&self, addon: &Addon, cx: &Context<Self>) -> Div {
         let id = addon.id;
         let downloaded = self.data.is_downloaded(id);
         let open = self.install_open == Some(id);
@@ -177,7 +177,7 @@ impl Foundry {
         clippy::too_many_lines,
         reason = "Keep the library view and its empty and loading states together"
     )]
-    pub(super) fn library_page(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn library_page(&self, cx: &Context<Self>) -> AnyElement {
         let busy = self.busy();
         let connected = self.connected();
         let intro = heading(

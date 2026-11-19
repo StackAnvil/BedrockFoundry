@@ -166,7 +166,7 @@ impl Foundry {
                 cx.background_executor()
                     .timer(Duration::from_millis(100))
                     .await;
-                if this.update_in(cx, Foundry::receive).is_err() {
+                if this.update_in(cx, Self::receive).is_err() {
                     break;
                 }
             }
@@ -238,7 +238,7 @@ impl Foundry {
 
     /// Queues work behind any running action without clearing the status.
     fn enqueue(&mut self, request: Request, activity: &str) {
-        let op = request.op();
+        let Some(op) = request.op() else { return };
         if self.worker.tx.send(request).is_err() {
             self.notice = Some(Notice {
                 text: "The background worker stopped. Restart Bedrock Foundry.".into(),
@@ -340,7 +340,7 @@ impl Foundry {
         }
     }
 
-    fn finish(&mut self, op: Op, result: std::result::Result<Outcome, worker::Failure>) {
+    fn finish(&mut self, op: Op, result: Result<Outcome, worker::Failure>) {
         if let Some(index) = self.pending.iter().position(|(pending, _)| *pending == op) {
             self.pending.remove(index);
         }
@@ -350,7 +350,24 @@ impl Foundry {
                 match op {
                     Op::Browse => self.catalog_error = None,
                     Op::Library | Op::Claim => self.library_error = None,
-                    _ => {}
+                    Op::Restore
+                    | Op::Login
+                    | Op::Logout
+                    | Op::Balance
+                    | Op::Quote
+                    | Op::Buy
+                    | Op::CancelPurchase
+                    | Op::Sample
+                    | Op::Download
+                    | Op::Create
+                    | Op::Provision
+                    | Op::Import
+                    | Op::Install
+                    | Op::Start
+                    | Op::Stop
+                    | Op::Console
+                    | Op::Save
+                    | Op::Backup => {}
                 }
                 self.succeed(op, outcome);
                 return;
@@ -360,7 +377,25 @@ impl Foundry {
         match op {
             Op::Browse => self.catalog_error = Some(message.clone()),
             Op::Library => self.library_error = Some(message.clone()),
-            _ => {}
+            Op::Restore
+            | Op::Login
+            | Op::Logout
+            | Op::Balance
+            | Op::Quote
+            | Op::Buy
+            | Op::CancelPurchase
+            | Op::Sample
+            | Op::Claim
+            | Op::Download
+            | Op::Create
+            | Op::Provision
+            | Op::Import
+            | Op::Install
+            | Op::Start
+            | Op::Stop
+            | Op::Console
+            | Op::Save
+            | Op::Backup => {}
         }
         match (op, self.purchase.take()) {
             (Op::Quote, Some(Purchase::Checking { title, .. })) => {
@@ -453,7 +488,24 @@ impl Foundry {
                 self.detail = None;
                 self.purchase = None;
             }
-            _ => {}
+            Op::Restore
+            | Op::Login
+            | Op::Browse
+            | Op::Balance
+            | Op::Quote
+            | Op::Buy
+            | Op::CancelPurchase
+            | Op::Sample
+            | Op::Download
+            | Op::Create
+            | Op::Provision
+            | Op::Import
+            | Op::Install
+            | Op::Start
+            | Op::Stop
+            | Op::Console
+            | Op::Save
+            | Op::Backup => {}
         }
     }
 
@@ -501,7 +553,7 @@ impl Foundry {
                     input.set_value(port.to_string(), window, cx);
                 });
             }
-            _ => {}
+            Page::Server | Page::Account => {}
         }
         cx.notify();
     }
@@ -547,7 +599,7 @@ impl Foundry {
         options: &[(&'static str, &'static str)],
         current: &str,
         disabled: bool,
-        cx: &mut Context<Self>,
+        cx: &Context<Self>,
         on_pick: fn(&mut Self, &'static str, &mut Context<Self>),
     ) -> Div {
         let mut row = div()
@@ -593,7 +645,7 @@ impl Foundry {
         clippy::too_many_lines,
         reason = "Keep sidebar layout and its navigation handlers together"
     )]
-    fn rail(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn rail(&self, window: &Window, cx: &Context<Self>) -> impl IntoElement {
         let _ = window;
         let nav_item = |id: &'static str, label: String, active: bool| {
             div()
@@ -850,7 +902,7 @@ impl Foundry {
         count
     }
 
-    fn status_bar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn status_bar(&self, cx: &Context<Self>) -> impl IntoElement {
         let bar = div()
             .flex()
             .items_center()
@@ -906,7 +958,7 @@ fn page(heading: impl IntoElement, actions: Option<AnyElement>, content: impl In
                 .items_start()
                 .gap_4()
                 .child(div().flex_1().min_w_0().child(heading))
-                .when_some(actions, gpui::ParentElement::child),
+                .when_some(actions, ParentElement::child),
         )
         .child(content)
 }
@@ -981,8 +1033,8 @@ impl Render for Foundry {
                     )
                     .child(self.status_bar(cx)),
             )
-            .when_some(detail, gpui::ParentElement::child)
-            .when_some(dialog, gpui::ParentElement::child)
+            .when_some(detail, ParentElement::child)
+            .when_some(dialog, ParentElement::child)
     }
 }
 

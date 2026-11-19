@@ -566,11 +566,8 @@ impl Managed {
         if self.child.try_wait()?.is_some() {
             return Ok(());
         }
-        #[expect(
-            clippy::let_underscore_must_use,
-            reason = "The process can close stdin during shutdown and the wait and kill fallback still runs"
-        )]
-        let _ = self.command("stop");
+        // Continue waiting for exit if the server has already closed stdin.
+        drop(self.command("stop"));
         let deadline = Instant::now() + Duration::from_secs(10);
         while Instant::now() < deadline {
             if self.child.try_wait()?.is_some() {
@@ -623,7 +620,7 @@ impl Processes {
             "Install BDS before starting this server"
         );
         save(root, config)?;
-        let log = std::fs::OpenOptions::new()
+        let log = fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(home.join("console.log"))?;
@@ -646,10 +643,10 @@ impl Processes {
         let lines = Arc::new(Mutex::new(VecDeque::new()));
         let file = Arc::new(Mutex::new(log));
         if let Some(out) = child.stdout.take() {
-            capture(out, lines.clone(), file.clone());
+            capture(out, Arc::clone(&lines), Arc::clone(&file));
         }
         if let Some(out) = child.stderr.take() {
-            capture(out, lines.clone(), file);
+            capture(out, Arc::clone(&lines), file);
         }
         entries.insert(
             config.id,
@@ -691,7 +688,7 @@ impl Processes {
         self.entries
             .lock()
             .ok()
-            .and_then(|entries| entries.get(&id).map(|e| e.lines.clone()))
+            .and_then(|entries| entries.get(&id).map(|e| Arc::clone(&e.lines)))
             .and_then(|lines| lines.lock().ok().map(|l| l.iter().cloned().collect()))
             .unwrap_or_default()
     }

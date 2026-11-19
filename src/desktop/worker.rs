@@ -103,31 +103,31 @@ pub enum Op {
 }
 
 impl Request {
-    pub fn op(&self) -> Op {
-        match self {
-            Request::Restore => Op::Restore,
-            Request::Login => Op::Login,
-            Request::Logout => Op::Logout,
-            Request::Library => Op::Library,
-            Request::Browse(_) => Op::Browse,
-            Request::Balance => Op::Balance,
-            Request::Quote(_) => Op::Quote,
-            Request::Buy(_) => Op::Buy,
-            Request::CancelPurchase => Op::CancelPurchase,
-            Request::Sample => Op::Sample,
-            Request::Claim(_) => Op::Claim,
-            Request::Download(_) => Op::Download,
-            Request::Create(..) => Op::Create,
-            Request::Provision(_) => Op::Provision,
-            Request::Import(..) => Op::Import,
-            Request::Install(..) => Op::Install,
-            Request::Start(_) => Op::Start,
-            Request::Stop(_) => Op::Stop,
-            Request::Console(..) => Op::Console,
-            Request::Save(_) => Op::Save,
-            Request::Backup(_) => Op::Backup,
-            Request::Quit => unreachable!("Quit is never submitted as work"),
-        }
+    pub fn op(&self) -> Option<Op> {
+        Some(match self {
+            Self::Restore => Op::Restore,
+            Self::Login => Op::Login,
+            Self::Logout => Op::Logout,
+            Self::Library => Op::Library,
+            Self::Browse(_) => Op::Browse,
+            Self::Balance => Op::Balance,
+            Self::Quote(_) => Op::Quote,
+            Self::Buy(_) => Op::Buy,
+            Self::CancelPurchase => Op::CancelPurchase,
+            Self::Sample => Op::Sample,
+            Self::Claim(_) => Op::Claim,
+            Self::Download(_) => Op::Download,
+            Self::Create(..) => Op::Create,
+            Self::Provision(_) => Op::Provision,
+            Self::Import(..) => Op::Import,
+            Self::Install(..) => Op::Install,
+            Self::Start(_) => Op::Start,
+            Self::Stop(_) => Op::Stop,
+            Self::Console(..) => Op::Console,
+            Self::Save(_) => Op::Save,
+            Self::Backup(_) => Op::Backup,
+            Self::Quit => return None,
+        })
     }
 }
 
@@ -168,48 +168,36 @@ pub struct Worker {
 
 impl Worker {
     pub fn start(root: Option<PathBuf>) -> Self {
-        let (tx, requests) = mpsc::channel();
+        let (tx, requests) = mpsc::channel::<Request>();
         let (events, rx) = mpsc::channel();
         let cancel = Arc::new(AtomicBool::new(false));
-        let cancellation = cancel.clone();
+        let cancellation = Arc::clone(&cancel);
         std::thread::spawn(move || {
             let runtime = match tokio::runtime::Runtime::new() {
                 Ok(runtime) => runtime,
                 Err(error) => {
-                    #[expect(
-                        clippy::let_underscore_must_use,
-                        reason = "The receiver can disconnect during shutdown"
-                    )]
-                    let _ = events.send(Event::Fatal(error.to_string()));
+                    drop(events.send(Event::Fatal(error.to_string())));
                     return;
                 }
             };
             let mut backend = match Backend::open(root) {
                 Ok(backend) => backend,
                 Err(error) => {
-                    #[expect(
-                        clippy::let_underscore_must_use,
-                        reason = "The receiver can disconnect during shutdown"
-                    )]
-                    let _ = events.send(Event::Fatal(format!("{error:#}")));
+                    drop(events.send(Event::Fatal(format!("{error:#}"))));
                     return;
                 }
             };
-            #[expect(
-                clippy::let_underscore_must_use,
-                reason = "The receiver can disconnect during shutdown"
-            )]
-            let _ = events.send(Event::Processes(backend.processes.clone()));
+            drop(events.send(Event::Processes(backend.processes.clone())));
             let mut session = Session::default();
             let mut last_warning = None;
             loop {
                 let request = match requests.recv_timeout(Duration::from_millis(500)) {
-                    Ok(Request::Quit) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                    Err(mpsc::RecvTimeoutError::Disconnected) => break,
                     Ok(request) => Some(request),
                     Err(mpsc::RecvTimeoutError::Timeout) => None,
                 };
                 if let Some(request) = request {
-                    let op = request.op();
+                    let Some(op) = request.op() else { break };
                     let result = runtime.block_on(run(
                         &mut backend,
                         &mut session,
@@ -217,11 +205,7 @@ impl Worker {
                         &events,
                         &cancellation,
                     ));
-                    #[expect(
-                        clippy::let_underscore_must_use,
-                        reason = "The receiver can disconnect during shutdown"
-                    )]
-                    let _ = events.send(Event::Done(
+                    drop(events.send(Event::Done(
                         op,
                         result.map_err(|error| Failure {
                             unknown_purchase: op == Op::Buy
@@ -229,25 +213,17 @@ impl Worker {
                                     == Some(&TransactionFailure::Unknown),
                             message: format!("{error:#}"),
                         }),
-                    ));
+                    )));
                 }
                 match snapshot(&backend, &session) {
                     Ok(snapshot) => {
                         last_warning = None;
-                        #[expect(
-                            clippy::let_underscore_must_use,
-                            reason = "The receiver can disconnect during shutdown"
-                        )]
-                        let _ = events.send(Event::Snapshot(Box::new(snapshot)));
+                        drop(events.send(Event::Snapshot(Box::new(snapshot))));
                     }
                     Err(error) => {
                         let message = format!("{error:#}");
                         if last_warning.as_ref() != Some(&message) {
-                            #[expect(
-                                clippy::let_underscore_must_use,
-                                reason = "The receiver can disconnect during shutdown"
-                            )]
-                            let _ = events.send(Event::Warning(message.clone()));
+                            drop(events.send(Event::Warning(message.clone())));
                             last_warning = Some(message);
                         }
                     }
@@ -267,11 +243,7 @@ impl Worker {
 impl Drop for Worker {
     fn drop(&mut self) {
         self.cancel.store(true, Ordering::Relaxed);
-        #[expect(
-            clippy::let_underscore_must_use,
-            reason = "The receiver can disconnect during shutdown"
-        )]
-        let _ = self.tx.send(Request::Quit);
+        drop(self.tx.send(Request::Quit));
         if let Some(processes) = &self.processes {
             processes.stop_all();
         }
@@ -309,11 +281,7 @@ async fn run(
                 .accounts
                 .sign_in(
                     |url, code| {
-                        #[expect(
-                            clippy::let_underscore_must_use,
-                            reason = "The receiver can disconnect during shutdown"
-                        )]
-                        let _ = events.send(Event::DeviceCode(url, code));
+                        drop(events.send(Event::DeviceCode(url, code)));
                     },
                     cancellation,
                 )
@@ -400,7 +368,7 @@ async fn run(
             Outcome::Message("Server settings saved".into())
         }
         Request::Backup(id) => Outcome::BackupSaved(backend.backup(id)?),
-        Request::Quit => unreachable!("Quit ends the worker loop"),
+        Request::Quit => anyhow::bail!("Quit ends the worker loop"),
     })
 }
 

@@ -37,11 +37,11 @@ pub enum Tone {
 impl Tone {
     pub fn colors(self) -> (u32, u32) {
         match self {
-            Tone::Neutral => (MUTED, 0xe2e5e0),
-            Tone::Good => (MOSS, MOSS_SOFT),
-            Tone::Busy => (AMBER, AMBER_SOFT),
-            Tone::Bad => (RED, RED_SOFT),
-            Tone::Coin => (GOLD, GOLD_SOFT),
+            Self::Neutral => (MUTED, 0xe2e5e0),
+            Self::Good => (MOSS, MOSS_SOFT),
+            Self::Busy => (AMBER, AMBER_SOFT),
+            Self::Bad => (RED, RED_SOFT),
+            Self::Coin => (GOLD, GOLD_SOFT),
         }
     }
 }

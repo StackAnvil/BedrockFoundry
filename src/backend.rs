@@ -36,7 +36,7 @@ impl Backend {
     pub fn open(root: Option<PathBuf>) -> Result<Self> {
         let store = Store::open(root)?;
         server::recover_installations(&store.root)?;
-        let identity: Identity = store.read("device.json")?.unwrap_or(Identity {
+        let identity: Identity = store.read("device.json")?.unwrap_or_else(|| Identity {
             device: Uuid::new_v4(),
         });
         store.save("device.json", &identity)?;

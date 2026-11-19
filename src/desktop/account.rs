@@ -8,7 +8,7 @@ impl Foundry {
         clippy::too_many_lines,
         reason = "Keep account page layout and its event handlers together"
     )]
-    pub(super) fn account_page(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn account_page(&self, cx: &Context<Self>) -> AnyElement {
         let busy = self.busy();
         let intro = heading(
             "Microsoft account",

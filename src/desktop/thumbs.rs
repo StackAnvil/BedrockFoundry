@@ -42,15 +42,11 @@ impl Thumbs {
                 while let Ok(url) = requests.recv() {
                     let http = http.clone();
                     let results = results.clone();
-                    let limit = limit.clone();
+                    let limit = Arc::clone(&limit);
                     runtime.spawn(async move {
                         let _permit = limit.acquire_owned().await;
                         let image = fetch(&http, &url).await;
-                        #[expect(
-                            clippy::let_underscore_must_use,
-                            reason = "The receiver can disconnect during shutdown"
-                        )]
-                        let _ = results.send((url, image));
+                        drop(results.send((url, image)));
                     });
                 }
             })
@@ -65,7 +61,7 @@ impl Thumbs {
     /// Returns a loaded image, and requests it the first time it is seen.
     pub fn get(&mut self, url: &str) -> Option<Arc<Image>> {
         match self.cache.get(url) {
-            Some(Thumb::Ready(image)) => Some(image.clone()),
+            Some(Thumb::Ready(image)) => Some(Arc::clone(image)),
             Some(_) => None,
             None => {
                 if self.cache.len() >= MAX_CACHED {

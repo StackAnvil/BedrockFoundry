@@ -36,7 +36,10 @@ fn availability(item: &CatalogItem, data: &Snapshot) -> Availability {
 fn price_tag(item: &CatalogItem, data: &Snapshot) -> Div {
     match availability(item, data) {
         Availability::Downloaded | Availability::Owned => pill("Owned", Tone::Good),
-        _ => match item.price {
+        Availability::ViewOnly
+        | Availability::Free
+        | Availability::ForSale(_)
+        | Availability::Unavailable => match item.price {
             Some(0) => pill("Free", Tone::Good),
             Some(amount) => pill(minecoins(amount), Tone::Coin),
             None => pill("No price", Tone::Neutral),
@@ -85,7 +88,7 @@ impl Foundry {
         }
     }
 
-    pub(super) fn connect_prompt(&mut self, text: &str, cx: &mut Context<Self>) -> Div {
+    pub(super) fn connect_prompt(&self, text: &str, cx: &Context<Self>) -> Div {
         panel()
             .p_6()
             .flex()
@@ -112,11 +115,7 @@ impl Foundry {
         clippy::too_many_lines,
         reason = "Keep the listing layout, filters, and pagination handlers together"
     )]
-    pub(super) fn marketplace_page(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
+    pub(super) fn marketplace_page(&mut self, window: &Window, cx: &Context<Self>) -> AnyElement {
         let intro = heading(
             "Marketplace",
             "Browse everything in the Minecraft Marketplace. Standalone add-ons can be bought, downloaded, and installed on your servers here.",
@@ -453,7 +452,7 @@ impl Foundry {
         clippy::too_many_lines,
         reason = "Keep listing details and their actions together"
     )]
-    pub(super) fn listing_sheet(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
+    pub(super) fn listing_sheet(&mut self, cx: &Context<Self>) -> Option<AnyElement> {
         let id = self.detail?;
         let item = self
             .data
@@ -942,7 +941,7 @@ impl Foundry {
     }
 }
 
-fn cancel_review(cx: &mut Context<Foundry>) -> Button {
+fn cancel_review(cx: &Context<Foundry>) -> Button {
     Button::new("purchase-cancel")
         .outline()
         .label("Cancel")
@@ -958,7 +957,7 @@ fn requote(
     title: String,
     busy: bool,
     label: &'static str,
-    cx: &mut Context<Foundry>,
+    cx: &Context<Foundry>,
 ) -> Button {
     Button::new("purchase-requote")
         .primary()

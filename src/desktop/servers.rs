@@ -77,7 +77,7 @@ fn step(number: u8, heading: &str, text: &str, stage: Stage, body: Option<AnyEle
                     div()
                         .font_weight(FontWeight::MEDIUM)
                         .when(stage != Stage::Current, |this| this.text_color(rgb(MUTED)))
-                        .when(stage == Stage::Current, gpui::Styled::text_base)
+                        .when(stage == Stage::Current, Styled::text_base)
                         .child(heading.to_owned()),
                 )
                 .child(muted(text.to_owned()))
@@ -89,7 +89,7 @@ fn step(number: u8, heading: &str, text: &str, stage: Stage, body: Option<AnyEle
 fn setup_steps(create: Stage, body: Option<AnyElement>) -> Div {
     let (create_body, install_body) = match create {
         Stage::Current => (body, None),
-        _ => (None, body),
+        Stage::Done | Stage::Later => (None, body),
     };
     div()
         .flex()
@@ -152,7 +152,7 @@ impl Foundry {
         );
     }
 
-    pub(super) fn new_server_page(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn new_server_page(&self, cx: &Context<Self>) -> AnyElement {
         let first = self.data.servers.is_empty();
         let port = self.new_port.read(cx).value().trim().parse::<u16>().ok();
         let form = panel()
@@ -226,11 +226,7 @@ impl Foundry {
         clippy::too_many_lines,
         reason = "Keep server navigation and its actions together"
     )]
-    pub(super) fn server_page(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
+    pub(super) fn server_page(&self, window: &Window, cx: &Context<Self>) -> AnyElement {
         let Some(server) = self.selected_server() else {
             return self.new_server_page(cx);
         };
@@ -362,7 +358,7 @@ impl Foundry {
         .into_any_element()
     }
 
-    fn install_card(&mut self, id: Uuid, cx: &mut Context<Self>) -> Div {
+    fn install_card(&self, id: Uuid, cx: &Context<Self>) -> Div {
         let busy = self.busy();
         let installing = self.working_on(Op::Provision) || self.working_on(Op::Import);
         panel()
@@ -412,11 +408,7 @@ impl Foundry {
                                 });
                                 cx.spawn(async move |this, cx| {
                                     let selected = picker.await;
-                                    #[expect(
-                                        clippy::let_underscore_must_use,
-                                        reason = "The view can close while the file picker is open"
-                                    )]
-                                    let _ = this.update(cx, |this, cx| match selected {
+                                    drop(this.update(cx, |this, cx| match selected {
                                         Ok(Ok(Some(paths))) => {
                                             if let Some(path) = paths.into_iter().next() {
                                                 this.submit(
@@ -429,7 +421,7 @@ impl Foundry {
                                         Ok(Ok(None)) => {}
                                         Ok(Err(error)) => this.fail(format!("{error:#}"), cx),
                                         Err(error) => this.fail(error.to_string(), cx),
-                                    });
+                                    }));
                                 })
                                 .detach();
                             })),
@@ -440,7 +432,7 @@ impl Foundry {
             ))
     }
 
-    fn console_tab(&mut self, server: &ServerView, cx: &mut Context<Self>) -> AnyElement {
+    fn console_tab(&self, server: &ServerView, cx: &Context<Self>) -> AnyElement {
         let id = server.config.id;
         let mono = cx.theme().mono_font_family.clone();
         let mut log = div()
@@ -513,7 +505,7 @@ impl Foundry {
         clippy::too_many_lines,
         reason = "Keep the add-on list and installation controls together"
     )]
-    fn addons_tab(&mut self, server: &ServerView, cx: &mut Context<Self>) -> AnyElement {
+    fn addons_tab(&self, server: &ServerView, cx: &Context<Self>) -> AnyElement {
         let id = server.config.id;
         let busy = self.busy();
         let mut body = div().flex().flex_col().gap_6();
@@ -632,12 +624,7 @@ impl Foundry {
         clippy::too_many_lines,
         reason = "Keep settings fields and their event handlers together"
     )]
-    fn settings_tab(
-        &mut self,
-        server: &ServerView,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
+    fn settings_tab(&self, server: &ServerView, window: &Window, cx: &Context<Self>) -> AnyElement {
         let _ = window;
         let id = server.config.id;
         let locked = server.running || self.busy();
@@ -833,7 +820,7 @@ impl Foundry {
         Ok(config)
     }
 
-    fn backups_tab(&mut self, server: &ServerView, cx: &mut Context<Self>) -> AnyElement {
+    fn backups_tab(&self, server: &ServerView, cx: &Context<Self>) -> AnyElement {
         let id = server.config.id;
         let backups = self.data.root.join("backups");
         let last = self.last_backup.get(&id).cloned();

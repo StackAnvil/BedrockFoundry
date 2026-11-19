@@ -304,8 +304,8 @@ pub fn parse_addon<S: std::hash::BuildHasher>(
     ensure!(!packs.is_empty(), "Catalog add-on has no supported packs");
     let name = value["Title"]["en-US"]
         .as_str()
-        .or(value["Title"]["NEUTRAL"].as_str())
-        .or(value["Title"]["neutral"].as_str())
+        .or_else(|| value["Title"]["NEUTRAL"].as_str())
+        .or_else(|| value["Title"]["neutral"].as_str())
         .context("Catalog add-on has no title")?;
     Ok(Some(Addon {
         id: value["Id"]
