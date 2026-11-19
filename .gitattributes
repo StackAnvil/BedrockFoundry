@@ -5,3 +5,4 @@
 *.gz binary
 *.gif binary
 *.mp4 binary
+fuzz/seeds/** binary

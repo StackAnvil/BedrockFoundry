@@ -48,6 +48,36 @@ Keep `Cargo.lock` committed. Do not remove license checks or loosen archive
 validation to accept a broken fixture. See [the release guide](docs/releases.md)
 for version tags and publishing.
 
+## Fuzzing
+
+The `fuzz/` directory is a separate Cargo project with cargo-fuzz targets for
+ZIP admission, add-on bundle decoding and extraction, BDS distribution
+extraction, entitlement receipts, and download metadata. The normal checks do
+not build it. It needs the pinned nightly toolchain and cargo-fuzz 0.13.2. The
+extraction targets write small files to the system temporary directory.
+
+```sh
+rustup toolchain install nightly-2026-11-01 --profile minimal
+cargo install cargo-fuzz --version 0.13.2 --locked
+cargo +nightly-2026-11-01 fuzz list
+mkdir -p fuzz/corpus/zip_admission
+cargo +nightly-2026-11-01 fuzz run zip_admission fuzz/corpus/zip_admission fuzz/seeds/zip_admission -- -max_total_time=300
+```
+
+New inputs go to `fuzz/corpus/`, and failing inputs go to `fuzz/artifacts/`.
+Git ignores both. Keep `fuzz/seeds/` small and synthetic. To reproduce and
+minimize a failure, pass the saved input to the same target:
+
+```sh
+cargo +nightly-2026-11-01 fuzz run zip_admission fuzz/artifacts/zip_admission/crash-<hash>
+cargo +nightly-2026-11-01 fuzz tmin zip_admission fuzz/artifacts/zip_admission/crash-<hash>
+```
+
+Fix the parser and add a regression test with the minimized input. The Fuzz
+workflow runs each target for 60 seconds when a change touches the parsers or
+`fuzz/`, and for 10 minutes every week. A failed run uploads its inputs as a
+workflow artifact.
+
 ## Community and security
 
 Follow the [StackAnvil code of conduct](https://github.com/StackAnvil/.github/blob/main/CODE_OF_CONDUCT.md).
