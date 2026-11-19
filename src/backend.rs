@@ -174,6 +174,10 @@ impl Backend {
                 manifests: packs.iter().map(|p| p.manifest.clone()).collect(),
             };
             atomic_json(&staging.path().join("addon.json"), &cached)?;
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "This closure runs on a blocking worker"
+            )]
             std::fs::rename(staging.path(), &destination)?;
             Ok::<_, anyhow::Error>(cached)
         })

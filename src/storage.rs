@@ -16,6 +16,10 @@ pub struct Store {
 }
 
 impl Store {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "The synchronous store opens during backend initialization"
+    )]
     pub fn open(root: Option<PathBuf>) -> Result<Self> {
         let root = root
             .or_else(|| std::env::var_os("FOUNDRY_HOME").map(PathBuf::from))
@@ -60,6 +64,10 @@ impl Store {
     }
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "Synchronous storage creates application directories with private permissions"
+)]
 pub fn private_dir(path: &Path) -> Result<()> {
     fs::create_dir_all(path)?;
     #[cfg(unix)]

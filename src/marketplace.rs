@@ -43,6 +43,10 @@ pub struct PackIdentity {
     pub kind: String,
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "The shared service client sets connect, read, and total timeouts"
+)]
 pub fn client() -> Result<Client> {
     Ok(Client::builder()
         .https_only(true)

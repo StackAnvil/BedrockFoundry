@@ -262,6 +262,10 @@ fn service(status: u16, body: Value) -> (String, std::thread::JoinHandle<Value>)
 async fn transaction_sends_the_confirmed_amount_and_does_not_call_a_mismatched_success_accepted() {
     let q = quote();
     let correlation = Uuid::new_v4();
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "The loopback fixture requires HTTP and a short timeout"
+    )]
     let http = Client::builder()
         .retry(reqwest::retry::never())
         .timeout(Duration::from_secs(3))

@@ -529,6 +529,10 @@ fn recover_one(root: &Path, id: Uuid) -> Result<()> {
 }
 
 /// Recover only pending installations while the caller holds the application lease.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "Journal recovery scans server directories during synchronous backend initialization"
+)]
 pub fn recover_installations(root: &Path) -> Result<()> {
     for entry in fs::read_dir(root.join("servers"))? {
         let entry = entry?;
@@ -767,6 +771,10 @@ fn capture(
 }
 
 pub fn backup(root: &Path, config: &ServerConfig) -> Result<PathBuf> {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "Synchronous backup walks the world directory on the caller thread"
+    )]
     fn append(zip: &mut ZipWriter<&mut File>, base: &Path, path: &Path) -> Result<()> {
         for entry in fs::read_dir(path)? {
             let entry = entry?;
