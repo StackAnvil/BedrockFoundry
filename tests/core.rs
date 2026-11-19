@@ -87,6 +87,30 @@ fn rejects_a_pack_without_its_entitlement_or_with_a_different_catalog_version() 
     );
 }
 #[test]
+fn rejects_an_encrypted_index_with_a_truncated_header() {
+    let id = Uuid::new_v4();
+    let key = [0x51; 32];
+    let (pack, _) = encrypted_pack(id, &key);
+    let mut files = archive::read_zip(&pack).unwrap();
+    files.get_mut("contents.json").unwrap().truncate(255);
+    let pack = archive(
+        files
+            .iter()
+            .map(|(name, data)| (name.as_str(), data.clone()))
+            .collect(),
+    );
+    let result = archive::decode_bundle(
+        &pack,
+        &HashMap::from([(id, Zeroizing::new(key.to_vec()))]),
+        &HashMap::from([(id, [1, 0, 0])]),
+    );
+    assert_eq!(
+        result.err().unwrap().to_string(),
+        "Invalid encrypted pack index"
+    );
+}
+
+#[test]
 fn rejects_archive_paths_that_escape_or_alias_a_destination() {
     for path in [
         "../secret",
@@ -108,6 +132,19 @@ fn rejects_archive_paths_that_escape_or_alias_a_destination() {
     archive::read_zip(&archive(vec![("../secret", vec![1])]))
         .expect_err("ZIP accepted a parent directory member");
 }
+#[test]
+fn rejects_archive_symlinks() {
+    let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    writer
+        .add_symlink("alias", "target", SimpleFileOptions::default())
+        .unwrap();
+    let bytes = writer.finish().unwrap().into_inner();
+    assert_eq!(
+        archive::read_zip(&bytes).unwrap_err().to_string(),
+        "Archive contains a symbolic link"
+    );
+}
+
 #[test]
 fn rejects_duplicate_archive_payloads() {
     // ZIP writers refuse duplicate names. Model an external archive with two
@@ -183,6 +220,10 @@ fn preserves_custom_server_properties_and_prevents_line_injection() {
         .expect_err("Configuration accepted a server name containing a newline");
 }
 #[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "This synchronous test reads or writes local fixtures"
+)]
 fn installs_both_pack_types_with_matching_world_activation_and_keeps_world_data() {
     let temp = tempfile::tempdir().unwrap();
     let store = Store::open(Some(temp.path().to_path_buf())).unwrap();
@@ -287,6 +328,10 @@ fn missing_pack_dependency_leaves_server_configuration_unchanged() {
     assert!(server::list(&store.root).unwrap()[0].addons.is_empty());
 }
 #[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "This synchronous test reads or writes local fixtures"
+)]
 fn backup_includes_world_settings_and_addon_files() {
     let temp = tempfile::tempdir().unwrap();
     let store = Store::open(Some(temp.path().to_path_buf())).unwrap();
@@ -316,6 +361,10 @@ fn another_process_cannot_open_the_same_application_store() {
 }
 
 #[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "This synchronous test reads or writes local fixtures"
+)]
 fn interrupted_pack_installation_restores_the_exact_previous_world_activation() {
     let temp = tempfile::tempdir().unwrap();
     let store = Store::open(Some(temp.path().to_path_buf())).unwrap();
@@ -339,6 +388,10 @@ fn interrupted_pack_installation_restores_the_exact_previous_world_activation() 
 }
 
 #[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "This synchronous test reads or writes local fixtures"
+)]
 fn installing_an_addon_keeps_an_externally_managed_pack_active() {
     let temp = tempfile::tempdir().unwrap();
     let store = Store::open(Some(temp.path().to_path_buf())).unwrap();
@@ -397,6 +450,10 @@ fn network_access_uses_the_native_bind_property_and_a_fixed_udp_port() {
 
 #[cfg(unix)]
 #[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "This synchronous test reads or writes local fixtures"
+)]
 fn stopping_a_managed_server_sends_stop_and_waits_for_its_exit() {
     use std::os::unix::fs::PermissionsExt;
     let temp = tempfile::tempdir().unwrap();

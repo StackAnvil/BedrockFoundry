@@ -1,3 +1,5 @@
+#![warn(clippy::indexing_slicing, clippy::arithmetic_side_effects)]
+
 use crate::storage::{private_dir, safe_relative};
 use aes::cipher::{AsyncStreamCipher, KeyIvInit};
 use anyhow::{Context, Result, bail, ensure};
@@ -80,34 +82,47 @@ fn read_zip_with_budget(bytes: &[u8], budget: &mut u64) -> Result<BTreeMap<Strin
     let mut zip = zip::ZipArchive::new(Cursor::new(bytes))?;
     // zip's directory map retains only the last entry for duplicate names.
     // Inspect the accepted central directory before that loss of information.
-    let mut position = usize::try_from(zip.central_directory_start())?;
+    let position = usize::try_from(zip.central_directory_start())?;
+    let mut directory = bytes
+        .get(position..)
+        .context("Invalid ZIP directory offset")?;
     let mut names = std::collections::HashSet::new();
     let mut central_entries = 0usize;
     let mut legacy_indices = 0usize;
-    while bytes.get(position..position + 4) == Some(&[0x50, 0x4b, 0x01, 0x02]) {
-        let header = bytes
-            .get(position..position + 46)
+    while directory.starts_with(&[0x50, 0x4b, 0x01, 0x02]) {
+        let (header, rest) = directory
+            .split_at_checked(46)
             .context("Truncated ZIP directory")?;
-        let length = |offset| u16::from_le_bytes([header[offset], header[offset + 1]]) as usize;
-        let name_len = length(28);
-        let name = bytes
-            .get(position + 46..position + 46 + name_len)
-            .context("Truncated ZIP filename")?;
-        central_entries += 1;
+        let length = |offset| {
+            let (field, _) = header.get(offset..)?.split_at_checked(2)?;
+            let field = <[u8; 2]>::try_from(field).ok()?;
+            Some(usize::from(u16::from_le_bytes(field)))
+        };
+        let name_len = length(28).context("Missing ZIP filename length")?;
+        let name = rest.get(..name_len).context("Truncated ZIP filename")?;
+        central_entries = central_entries
+            .checked_add(1)
+            .context("ZIP entry count overflow")?;
         ensure!(
             central_entries <= MAX_FILES,
             "Archive contains too many entries"
         );
         if !names.insert(name.iter().map(u8::to_ascii_lowercase).collect::<Vec<_>>()) {
             ensure!(name == b"contents.json", "Archive contains duplicate files");
-            legacy_indices += 1;
+            legacy_indices = legacy_indices
+                .checked_add(1)
+                .context("ZIP duplicate count overflow")?;
         }
-        position = position
-            .checked_add(46 + name_len + length(30) + length(32))
-            .context("ZIP directory overflow")?;
+        let extra_len = length(30).context("Missing ZIP extra field length")?;
+        let comment_len = length(32).context("Missing ZIP comment length")?;
+        directory = rest
+            .get(name_len..)
+            .and_then(|tail| tail.get(extra_len..))
+            .and_then(|tail| tail.get(comment_len..))
+            .context("Truncated ZIP extra field or comment")?;
     }
     ensure!(
-        central_entries - legacy_indices == zip.len(),
+        central_entries.checked_sub(legacy_indices) == Some(zip.len()),
         "ZIP directory has ambiguous file names"
     );
     ensure!(zip.len() <= MAX_FILES, "Archive contains too many files");
@@ -149,10 +164,14 @@ fn read_zip_with_budget(bytes: &[u8], budget: &mut u64) -> Result<BTreeMap<Strin
 pub fn decrypt(data: &[u8], key: &[u8]) -> Result<Vec<u8>> {
     ensure!(key.len() == 32, "Invalid Marketplace content key length");
     let mut result = data.to_vec();
-    cfb8::Decryptor::<aes::Aes256>::new_from_slices(key, &key[..16])
-        .map_err(|error| anyhow::anyhow!(error))
-        .context("Invalid Marketplace cipher parameters")?
-        .decrypt(&mut result);
+    cfb8::Decryptor::<aes::Aes256>::new_from_slices(
+        key,
+        key.get(..16)
+            .context("Invalid Marketplace content key length")?,
+    )
+    .map_err(|error| anyhow::anyhow!(error))
+    .context("Invalid Marketplace cipher parameters")?
+    .decrypt(&mut result);
     Ok(result)
 }
 
@@ -217,13 +236,13 @@ pub fn decode_bundle<K: std::hash::BuildHasher, S: std::hash::BuildHasher>(
 
             let id = identity.to_string();
             ensure!(
-                index.len() >= 256
-                    && index[4..8] == [0xfc, 0xb9, 0xcf, 0x9b]
-                    && index[16] == 36
-                    && index[17..53] == *id.as_bytes(),
+                index.get(4..8) == Some(&[0xfc, 0xb9, 0xcf, 0x9b])
+                    && index.get(16) == Some(&36)
+                    && index.get(17..53) == Some(id.as_bytes()),
                 "Invalid encrypted pack index"
             );
-            let index: Index = serde_json::from_slice(&decrypt(&index[256..], key)?)
+            let payload = index.get(256..).context("Invalid encrypted pack index")?;
+            let index: Index = serde_json::from_slice(&decrypt(payload, key)?)
                 .context("The account key cannot decrypt this pack index")?;
             for entry in index.content {
                 safe_relative(entry.path.trim_end_matches('/'))?;
@@ -263,6 +282,10 @@ pub fn decode_bundle<K: std::hash::BuildHasher, S: std::hash::BuildHasher>(
     Ok(packs)
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "The synchronous staging writer runs on a blocking worker"
+)]
 pub fn write_pack(pack: &DecodedPack, destination: &Path) -> Result<()> {
     private_dir(destination)?;
     for (name, bytes) in &pack.files {

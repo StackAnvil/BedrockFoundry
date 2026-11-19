@@ -136,6 +136,10 @@ impl ServerConfig {
 pub fn home(root: &Path, id: Uuid) -> PathBuf {
     root.join("servers").join(id.to_string())
 }
+#[expect(
+    clippy::disallowed_methods,
+    reason = "Configuration is saved synchronously by the backend"
+)]
 pub fn save(root: &Path, config: &ServerConfig) -> Result<()> {
     config.validate()?;
     let home = home(root, config.id);
@@ -154,6 +158,10 @@ pub fn save(root: &Path, config: &ServerConfig) -> Result<()> {
     temp.persist(properties).map_err(|e| e.error)?;
     Ok(())
 }
+#[expect(
+    clippy::disallowed_methods,
+    reason = "The synchronous backend reads configurations on the desktop worker or CLI thread"
+)]
 pub fn list(root: &Path) -> Result<Vec<ServerConfig>> {
     let mut servers = Vec::new();
     for entry in fs::read_dir(root.join("servers"))? {
@@ -248,9 +256,21 @@ pub async fn download_server(
         MAX_ARCHIVE,
     )
     .await?;
-    import_distribution(root, config, &bytes, version)
+    let root = root.to_path_buf();
+    let mut imported = config.clone();
+    let (imported, result) = tokio::task::spawn_blocking(move || {
+        let result = import_distribution(&root, &mut imported, &bytes, version);
+        (imported, result)
+    })
+    .await?;
+    *config = imported;
+    result
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "Distribution extraction runs on a blocking worker or during synchronous import"
+)]
 pub fn import_distribution(
     root: &Path,
     config: &mut ServerConfig,
@@ -319,6 +339,10 @@ pub fn import_distribution(
 #[expect(
     clippy::too_many_lines,
     reason = "Keep file staging, activation, and recovery journal handling together"
+)]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "Add-on installation runs synchronously on the desktop worker or CLI thread"
 )]
 pub fn install_addon(
     root: &Path,
@@ -457,6 +481,10 @@ struct InstallJournal {
     created: Vec<(String, Uuid)>,
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "Journal recovery runs during synchronous backend initialization"
+)]
 fn recover_one(root: &Path, id: Uuid) -> Result<()> {
     let home = home(root, id);
     let journal_path = home.join("install-journal.json");
@@ -511,6 +539,10 @@ pub fn recover_installations(root: &Path) -> Result<()> {
     Ok(())
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "World activation runs during synchronous add-on installation"
+)]
 fn activate(world: &Path, config: &ServerConfig) -> Result<()> {
     for (kind, name) in [
         ("behavior_packs", "behavior"),
@@ -562,6 +594,10 @@ impl Managed {
     pub fn running(&mut self) -> bool {
         self.child.try_wait().ok().flatten().is_none()
     }
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "Synchronous process cleanup also runs from Drop and is used by blocking workers"
+    )]
     pub fn stop(&mut self) -> Result<()> {
         if self.child.try_wait()?.is_some() {
             return Ok(());
@@ -608,6 +644,10 @@ impl Processes {
         );
         Ok(())
     }
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "The desktop worker and CLI blocking worker own synchronous process startup"
+    )]
     pub fn start(&self, root: &Path, config: &ServerConfig) -> Result<()> {
         let mut entries = self.entries()?;
         ensure!(

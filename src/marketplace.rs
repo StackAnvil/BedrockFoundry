@@ -15,6 +15,7 @@ use zeroize::Zeroizing;
 
 mod browse;
 mod purchase;
+mod version;
 pub(crate) use browse::published as published_item;
 pub use browse::{
     CatalogItem, CatalogPage, CatalogQuery, Ownership, PAGE_SIZE, browse, receipt_ownership,
@@ -249,18 +250,6 @@ async fn catalog(
         .await
         .with_context(|| format!("Marketplace catalog {method} failed"))
 }
-fn version(value: &str) -> Result<[u32; 3]> {
-    let parts = value
-        .split('.')
-        .map(str::parse)
-        .collect::<std::result::Result<Vec<u32>, _>>()?;
-    parts.try_into().map_err(|parts: Vec<u32>| {
-        anyhow::anyhow!(
-            "Catalog pack version has {} components, expected 3",
-            parts.len()
-        )
-    })
-}
 pub fn parse_addon<S: std::hash::BuildHasher>(
     value: &Value,
     owned: &HashSet<Uuid, S>,
@@ -293,7 +282,7 @@ pub fn parse_addon<S: std::hash::BuildHasher>(
                 .as_str()
                 .context("Catalog pack has no UUID")?
                 .parse()?,
-            version: version(
+            version: version::parse(
                 identity["version"]
                     .as_str()
                     .context("Catalog pack has no version")?,

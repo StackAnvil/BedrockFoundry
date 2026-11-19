@@ -1,3 +1,5 @@
+#![warn(clippy::indexing_slicing, clippy::arithmetic_side_effects)]
+
 use anyhow::{Context, Result, bail};
 use directories::ProjectDirs;
 use fs2::FileExt;
@@ -39,6 +41,10 @@ impl Store {
             _lease: lease,
         })
     }
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "The synchronous storage API reads local configuration"
+    )]
     pub fn read<T: DeserializeOwned>(&self, name: &str) -> Result<Option<T>> {
         let file = self.root.join(name);
         if !file.exists() {
@@ -95,7 +101,7 @@ pub fn safe_relative(name: &str) -> Result<PathBuf> {
                 || ["CON", "PRN", "AUX", "NUL"].contains(&stem.as_str())
                 || ((stem.starts_with("COM") || stem.starts_with("LPT"))
                     && stem.len() == 4
-                    && matches!(stem.as_bytes()[3], b'1'..=b'9'))
+                    && matches!(stem.as_bytes().get(3), Some(b'1'..=b'9')))
         })
     {
         bail!("Archive contains an invalid path");

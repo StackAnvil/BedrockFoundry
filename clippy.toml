@@ -1,3 +1,17 @@
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 allow-panic-in-tests = true
+
+disallowed-methods = [
+    { path = "std::env::set_var", reason = "Pass configuration explicitly or use Command::env for child processes" },
+    { path = "std::env::remove_var", reason = "Pass configuration explicitly or use Command::env_remove for child processes" },
+    { path = "std::thread::sleep", reason = "Use tokio::time::sleep on async paths" },
+    { path = "std::process::Command::output", reason = "Use tokio::process::Command on async paths, or run synchronous process management on a blocking worker" },
+    { path = "std::process::Command::status", reason = "Use tokio::process::Command on async paths, or run synchronous process management on a blocking worker" },
+    { path = "std::process::Command::spawn", reason = "Use tokio::process::Command on async paths, or run synchronous process management on a blocking worker" },
+    { path = "std::fs::read", reason = "Use tokio::fs or run synchronous filesystem work on a blocking worker" },
+    { path = "std::fs::read_to_string", reason = "Use tokio::fs or run synchronous filesystem work on a blocking worker" },
+    { path = "std::fs::write", reason = "Use tokio::fs or run synchronous filesystem work on a blocking worker" },
+    { path = "reqwest::Client::new", reason = "Use marketplace::client, which sets connect, read, and total request timeouts" },
+    { path = "reqwest::get", reason = "Use the shared marketplace::client with connect, read, and total request timeouts" },
+]

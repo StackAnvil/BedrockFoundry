@@ -32,7 +32,7 @@ sha2 = "0.10"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tempfile = "3"
 time = { version = "0.3", features = ["formatting"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "signal"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "signal", "fs"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 zeroize = "1"
 zip = { version = "4", default-features = false, features = ["deflate"] }
@@ -72,6 +72,7 @@ panic = "warn"
 todo = "warn"
 unimplemented = "warn"
 dbg_macro = "warn"
+disallowed_methods = "warn"
 allow_attributes = "warn"
 allow_attributes_without_reason = "warn"
 map_err_ignore = "warn"

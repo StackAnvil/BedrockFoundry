@@ -1,3 +1,5 @@
+#![warn(clippy::indexing_slicing, clippy::arithmetic_side_effects)]
+
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod linux;
 
@@ -50,10 +52,11 @@ impl Clone for XAttrs {
 impl Iterator for XAttrs {
     type Item = OsString;
     fn next(&mut self) -> Option<OsString> {
-        let data = &self.data[self.offset..];
+        let data = self.data.get(self.offset..)?;
         let end = data.iter().position(|&byte| byte == 0)?;
-        self.offset += end + 1;
-        Some(OsStr::from_bytes(&data[..end]).to_owned())
+        let name = data.get(..end)?;
+        self.offset = self.offset.checked_add(end)?.checked_add(1)?;
+        Some(OsStr::from_bytes(name).to_owned())
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -111,10 +114,7 @@ pub(crate) fn list_fd(fd: RawFd) -> io::Result<XAttrs> {
     };
     // SAFETY: On buffered success, the OS initializes exactly the returned byte count.
     let vec = unsafe { allocate_loop(read) }?;
-    Ok(XAttrs {
-        data: vec.into_boxed_slice(),
-        offset: 0,
-    })
+    parse_list(vec)
 }
 
 pub(crate) fn get_path(path: &Path, name: &OsStr) -> io::Result<Vec<u8>> {
@@ -172,8 +172,35 @@ pub(crate) fn list_path(path: &Path) -> io::Result<XAttrs> {
     };
     // SAFETY: On buffered success, the OS initializes exactly the returned byte count.
     let vec = unsafe { allocate_loop(read) }?;
+    parse_list(vec)
+}
+
+fn parse_list(data: Vec<u8>) -> io::Result<XAttrs> {
+    if data.last().is_some_and(|&last| last != 0) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Unterminated xattr name",
+        ));
+    }
     Ok(XAttrs {
-        data: vec.into_boxed_slice(),
+        data: data.into_boxed_slice(),
         offset: 0,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_unterminated_names() {
+        let result = parse_list(b"user.good\0user.truncated".to_vec());
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn reads_null_terminated_names() {
+        let names = parse_list(b"user.first\0user.second\0".to_vec()).unwrap();
+        assert!(names.eq(["user.first", "user.second"].iter().map(OsString::from)));
+    }
 }

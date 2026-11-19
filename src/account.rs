@@ -113,6 +113,10 @@ impl Accounts {
         self.persist()?;
         self.info().await
     }
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "Legacy import is a synchronous backend operation"
+    )]
     pub fn import_legacy(&mut self, path: &Path) -> Result<()> {
         let bytes = std::fs::read(path)?;
         if bytes.len() > 1024 * 1024 {

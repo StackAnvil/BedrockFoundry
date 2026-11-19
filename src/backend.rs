@@ -33,6 +33,10 @@ pub struct Backend {
     pub purchase_quote: Option<marketplace::PurchaseQuote>,
 }
 impl Backend {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "The CLI and desktop worker open the backend synchronously"
+    )]
     pub fn open(root: Option<PathBuf>) -> Result<Self> {
         let store = Store::open(root)?;
         server::recover_installations(&store.root)?;
@@ -155,25 +159,33 @@ impl Backend {
         self.accounts.persist()?;
         let packs = result?;
         let parent = self.store.root.join("addons");
-        let destination = parent.join(id.to_string());
-        ensure!(!destination.exists(), "This add-on is already downloaded");
-        let staging = tempfile::tempdir_in(&parent)?;
-        for pack in &packs {
-            write_pack(
-                pack,
-                &staging.path().join(pack.manifest.header.uuid.to_string()),
-            )?;
-        }
-        let cached = CachedAddon {
-            addon,
-            manifests: packs.iter().map(|p| p.manifest.clone()).collect(),
-        };
-        atomic_json(&staging.path().join("addon.json"), &cached)?;
-        std::fs::rename(staging.path(), &destination)?;
+        let cached = tokio::task::spawn_blocking(move || {
+            let destination = parent.join(id.to_string());
+            ensure!(!destination.exists(), "This add-on is already downloaded");
+            let staging = tempfile::tempdir_in(&parent)?;
+            for pack in &packs {
+                write_pack(
+                    pack,
+                    &staging.path().join(pack.manifest.header.uuid.to_string()),
+                )?;
+            }
+            let cached = CachedAddon {
+                addon,
+                manifests: packs.iter().map(|p| p.manifest.clone()).collect(),
+            };
+            atomic_json(&staging.path().join("addon.json"), &cached)?;
+            std::fs::rename(staging.path(), &destination)?;
+            Ok::<_, anyhow::Error>(cached)
+        })
+        .await??;
         self.available.insert(id, cached);
         Ok(())
     }
     pub fn install(&mut self, server: Uuid, addon: Uuid) -> Result<()> {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "Synchronous add-on installation runs on the desktop worker or CLI thread"
+        )]
         fn collect(
             base: &std::path::Path,
             dir: &std::path::Path,
@@ -226,6 +238,10 @@ impl Backend {
         let mut config = self.server(id)?;
         server::download_server(&self.store.root, &mut config, &self.http).await
     }
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "Synchronous BDS import runs on the desktop worker"
+    )]
     pub fn import_server(&mut self, id: Uuid, path: PathBuf) -> Result<()> {
         self.processes.require_stopped(id)?;
         let filename = path

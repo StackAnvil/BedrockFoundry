@@ -162,8 +162,8 @@ fn run() -> Result<()> {
         }
     }
     let runtime = tokio::runtime::Runtime::new()?;
-    runtime.block_on(async move {
-        let mut backend=Backend::open(cli.data_dir)?;
+    let mut backend = Backend::open(cli.data_dir)?;
+    runtime.block_on(async {
         match cli.command.context("Missing command")? {
             Command::Account{action}=>match action {
                 AccountCommand::Login=>{let cancel=AtomicBool::new(false);let account=backend.accounts.sign_in(|url,code|println!("Open {url} and enter {code}"),&cancel).await?;println!("Connected as {}",account.gamertag);},
@@ -210,19 +210,22 @@ fn run() -> Result<()> {
                 ServerCommand::List=>for config in backend.servers()? {println!("{}  {}  port {}  {}",config.id,config.name,config.port,config.version.as_deref().unwrap_or("BDS not installed"));},
                 ServerCommand::Create{name,port}=>{let server=backend.create(name,port)?;println!("{}",server.id);},
                 ServerCommand::Install{id}=>{backend.provision(id).await?;println!("BDS installed");},
-                ServerCommand::Import{id,archive,version}=>{let mut config=backend.server(id)?;let metadata=std::fs::metadata(&archive)?;anyhow::ensure!(metadata.len()<=bedrock_foundry::archive::MAX_ARCHIVE as u64,"Server archive exceeds the size limit");server::import_distribution(&backend.store.root,&mut config,&std::fs::read(archive)?,version)?;println!("BDS imported");},
+                ServerCommand::Import{id,archive,version}=>{let mut config=backend.server(id)?;let metadata=tokio::fs::metadata(&archive).await?;anyhow::ensure!(metadata.len()<=bedrock_foundry::archive::MAX_ARCHIVE as u64,"Server archive exceeds the size limit");let bytes=tokio::fs::read(archive).await?;let root=backend.store.root.clone();tokio::task::spawn_blocking(move || server::import_distribution(&root,&mut config,&bytes,version)).await??;println!("BDS imported");},
                 ServerCommand::Addon{id,addon}=>{backend.install(id,addon)?;println!("Add-on installed");},
                 ServerCommand::Backup{id}=>println!("{}",backend.backup(id)?.display()),
                 ServerCommand::Expose{id,local,address}=>{let mut config=backend.server(id)?;config.public = !local;config.public_address=address;backend.update(&config)?;println!("Network binding: {}:{}",if local{"127.0.0.1"}else{"0.0.0.0"},config.port);},
                 ServerCommand::Folder{id}=>println!("{}",backend.folder(id).display()),
                 ServerCommand::Run{id}=>{
-                    backend.start(id)?;
+                    let config=backend.server(id)?;
+                    let processes=backend.processes.clone();
+                    let root=backend.store.root.clone();
+                    tokio::task::spawn_blocking(move || processes.start(&root,&config)).await??;
                     let (tx,mut rx)=tokio::sync::mpsc::unbounded_channel();
                     std::thread::spawn(move || {for line in std::io::stdin().lock().lines().map_while(std::result::Result::ok) {if tx.send(line).is_err(){break;}}});
                     let mut last=Vec::new();let mut tick=tokio::time::interval(std::time::Duration::from_millis(100));let mut input_open=true;
                     loop {
                         tokio::select! {
-                            _=tokio::signal::ctrl_c()=>{backend.processes.stop(id)?;break;},
+                            _=tokio::signal::ctrl_c()=>{let processes=backend.processes.clone();tokio::task::spawn_blocking(move || processes.stop(id)).await??;break;},
                             command=rx.recv(),if input_open=>{match command {Some(text)=>backend.processes.command(id,&text)?,None=>input_open=false}},
                             _=tick.tick()=>{
                                 let logs=backend.processes.logs(id);

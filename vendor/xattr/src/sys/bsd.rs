@@ -1,5 +1,7 @@
 //! FreeBSD and NetBSD xattr support.
 
+#![warn(clippy::indexing_slicing, clippy::arithmetic_side_effects)]
+
 use std::convert::TryFrom;
 use std::ffi::{CString, OsStr, OsString};
 use std::io;
@@ -104,38 +106,25 @@ impl Clone for XAttrs {
 impl Iterator for XAttrs {
     type Item = OsString;
     fn next(&mut self) -> Option<OsString> {
-        if self.user_attrs.is_empty() && self.system_attrs.is_empty() {
-            return None;
-        }
-
-        if self.offset == self.user_attrs.len() + self.system_attrs.len() {
-            return None;
-        }
-
-        let data = if self.offset < self.system_attrs.len() {
-            &self.system_attrs[self.offset..]
+        let system_len = self.system_attrs.len();
+        let data = if let Some(user_offset) = self.offset.checked_sub(system_len) {
+            self.user_attrs.get(user_offset..)?
         } else {
-            &self.user_attrs[self.offset - self.system_attrs.len()..]
+            self.system_attrs.get(self.offset..)?
         };
-
-        let siz = data[0] as usize;
-
-        self.offset += siz + 1;
-        if self.offset < self.system_attrs.len() {
-            Some(prefix_namespace(
-                OsStr::from_bytes(&data[1..=siz]),
-                EXTATTR_NAMESPACE_SYSTEM,
-            ))
+        let (&size, names) = data.split_first()?;
+        let name = names.get(..usize::from(size))?;
+        self.offset = self.offset.checked_add(usize::from(size))?.checked_add(1)?;
+        let namespace = if self.offset < system_len {
+            EXTATTR_NAMESPACE_SYSTEM_STRING
         } else {
-            Some(prefix_namespace(
-                OsStr::from_bytes(&data[1..=siz]),
-                EXTATTR_NAMESPACE_USER,
-            ))
-        }
+            EXTATTR_NAMESPACE_USER_STRING
+        };
+        Some(prefix_namespace(OsStr::from_bytes(name), namespace))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        if self.user_attrs.len() + self.system_attrs.len() == self.offset {
+        if self.offset.checked_sub(self.system_attrs.len()) == Some(self.user_attrs.len()) {
             (0, Some(0))
         } else {
             (1, None)
@@ -175,10 +164,8 @@ fn name_to_ns(name: &OsStr) -> io::Result<(c_int, CString)> {
     ))
 }
 
-fn prefix_namespace(attr: &OsStr, ns: c_int) -> OsString {
-    let nsname = EXTATTR_NAMESPACE_NAMES[ns.cast_unsigned() as usize];
-    let mut v = Vec::with_capacity(nsname.len() + attr.as_bytes().len() + 1);
-    v.extend(nsname.as_bytes());
+fn prefix_namespace(attr: &OsStr, nsname: &str) -> OsString {
+    let mut v = nsname.as_bytes().to_vec();
     v.push(b'.');
     v.extend(attr.as_bytes());
     OsString::from_vec(v)
@@ -265,6 +252,8 @@ pub(crate) fn list_fd(fd: RawFd) -> io::Result<XAttrs> {
     // SAFETY: On buffered success, the OS initializes exactly the returned byte count.
     let uservec = unsafe { allocate_loop(read) }?;
 
+    validate_list(&sysvec)?;
+    validate_list(&uservec)?;
     Ok(XAttrs {
         system_attrs: sysvec.into_boxed_slice(),
         user_attrs: uservec.into_boxed_slice(),
@@ -365,9 +354,32 @@ pub(crate) fn list_path(path: &Path) -> io::Result<XAttrs> {
     // SAFETY: On buffered success, the OS initializes exactly the returned byte count.
     let uservec = unsafe { allocate_loop(read) }?;
 
+    validate_list(&sysvec)?;
+    validate_list(&uservec)?;
     Ok(XAttrs {
         system_attrs: sysvec.into_boxed_slice(),
         user_attrs: uservec.into_boxed_slice(),
         offset: 0,
     })
+}
+
+fn validate_list(mut data: &[u8]) -> io::Result<()> {
+    while let Some((&size, names)) = data.split_first() {
+        data = names
+            .get(usize::from(size)..)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Truncated xattr name"))?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_a_truncated_length_prefixed_name() {
+        let error = validate_list(b"\x03abc\x04de").unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        validate_list(b"\x03abc\x02de").unwrap();
+    }
 }
