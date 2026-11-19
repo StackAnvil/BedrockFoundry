@@ -2,7 +2,6 @@ macro_rules! platforms {
     ($($($platform:expr);* => $module:ident),*) => {
         $(
             #[cfg(any($(target_os = $platform),*))]
-            #[cfg_attr(not(any($(target_os = $platform),*)), allow(dead_code))]
             mod $module;
 
             #[cfg(any($(target_os = $platform),*))]
@@ -18,7 +17,6 @@ macro_rules! platforms {
         )*
 
         #[cfg(all(feature = "unsupported", not(any($($(target_os = $platform),*),*))))]
-        #[cfg_attr(any($($(target_os = $platform),*),*), allow(dead_code))]
         mod unsupported;
 
         #[cfg(all(feature = "unsupported", not(any($($(target_os = $platform),*),*))))]

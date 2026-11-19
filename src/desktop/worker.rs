@@ -192,10 +192,9 @@ impl Worker {
             let mut last_warning = None;
             loop {
                 let request = match requests.recv_timeout(Duration::from_millis(500)) {
-                    Ok(Request::Quit) => break,
+                    Ok(Request::Quit) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
                     Ok(request) => Some(request),
                     Err(mpsc::RecvTimeoutError::Timeout) => None,
-                    Err(mpsc::RecvTimeoutError::Disconnected) => break,
                 };
                 if let Some(request) = request {
                     let op = request.op();
@@ -257,6 +256,10 @@ struct Session {
     sample: Option<Addon>,
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "Keep worker requests and their outcomes in one exhaustive match"
+)]
 async fn run(
     backend: &mut Backend,
     session: &mut Session,
@@ -372,17 +375,17 @@ fn snapshot(backend: &Backend, session: &Session) -> Result<Snapshot> {
         .servers()?
         .into_iter()
         .map(|config| {
-            let running = backend.processes.running(config.id);
+            let running = backend.processes.running(config.id)?;
             let logs = backend.processes.logs(config.id);
             let ready = running && logs.iter().any(|line| line.contains("Server started."));
-            ServerView {
+            Ok(ServerView {
                 config,
                 running,
                 ready,
                 logs,
-            }
+            })
         })
-        .collect();
+        .collect::<Result<Vec<_>>>()?;
     let mut downloaded: Vec<Addon> = backend
         .available
         .values()

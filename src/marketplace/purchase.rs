@@ -1,4 +1,7 @@
-use super::*;
+use super::{
+    CatalogItem, Client, Context, Deserialize, Minecraft, Result, Serialize, Uuid, Value,
+    bounded_response, ensure, json, json_response,
+};
 use crate::storage::Store;
 use reqwest::header::HeaderValue;
 use std::{fmt, path::PathBuf};
@@ -32,7 +35,7 @@ pub async fn minecoin_balance(services: &mut Minecraft, http: &Client) -> Result
         .header("Authorization", auth.header_value()?)
         .send()
         .await
-        .map_err(|e| e.without_url())?;
+        .map_err(reqwest::Error::without_url)?;
     if response.status() == reqwest::StatusCode::UNAUTHORIZED {
         services.reject(&auth);
     }
@@ -129,6 +132,7 @@ impl PurchaseQuote {
         );
         Ok(())
     }
+    #[must_use]
     pub fn transaction_body(&self, correlation: Uuid) -> Value {
         json!({"CustomTags":{"CorrelationId":correlation},"OfferId":self.item.id,"StoreId":"","VirtualCurrency":{"Amount":self.amount.to_string(),"Type":"Minecoin"}})
     }
@@ -201,6 +205,10 @@ impl fmt::Display for TransactionFailure {
 }
 impl std::error::Error for TransactionFailure {}
 
+#[expect(
+    clippy::map_err_ignore,
+    reason = "Transport and response errors can contain signed URLs or sensitive receipt data"
+)]
 pub(super) async fn transaction(
     http: &Client,
     url: &str,
@@ -237,6 +245,10 @@ pub(super) async fn transaction(
     }
     Ok(())
 }
+#[expect(
+    clippy::map_err_ignore,
+    reason = "Authorization errors can expose credential details and callers only need to know that no purchase was submitted"
+)]
 pub(crate) async fn submit_purchase(
     services: &mut Minecraft,
     http: &Client,

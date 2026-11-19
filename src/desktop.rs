@@ -8,9 +8,13 @@ mod style;
 mod thumbs;
 mod worker;
 
-use anyhow::Result;
 use bedrock_foundry::marketplace::{CatalogQuery, PurchaseQuote};
-use gpui::{prelude::*, *};
+use gpui::{
+    AnyElement, App, AppContext, Application, Bounds, ClipboardItem, Div, Entity, FontWeight,
+    ObjectFit, PathPromptOptions, ScrollHandle, SharedString, Stateful, Subscription,
+    TitlebarOptions, Window, WindowBounds, WindowOptions, div, img, prelude::*, px, rgb, rgba,
+    size,
+};
 use gpui_component::{
     ActiveTheme, Disableable, Root, Sizable, Theme, ThemeMode,
     button::{Button, ButtonVariants},
@@ -21,7 +25,11 @@ use std::{
     path::PathBuf,
     time::Duration,
 };
-use style::*;
+use style::{
+    CONSOLE, CONSOLE_TEXT, DEEPSLATE, DEEPSLATE_MUTED, DEEPSLATE_RAISED, DEEPSLATE_TEXT, INK, LINE,
+    MOSS, MOSS_SOFT, MUTED, RED, STONE, SURFACE, Tone, callout, dot, field, mark, minecoins, muted,
+    panel, pill, section, title,
+};
 use thumbs::Thumbs;
 use uuid::Uuid;
 use worker::{Event, Op, Outcome, Request, ServerView, Snapshot, Worker};
@@ -74,6 +82,10 @@ struct Notice {
     tone: Tone,
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "These flags track independent UI states and requests"
+)]
 struct Foundry {
     worker: Worker,
     data: Snapshot,
@@ -154,10 +166,7 @@ impl Foundry {
                 cx.background_executor()
                     .timer(Duration::from_millis(100))
                     .await;
-                if this
-                    .update_in(cx, |this, window, cx| this.receive(window, cx))
-                    .is_err()
-                {
+                if this.update_in(cx, Foundry::receive).is_err() {
                     break;
                 }
             }
@@ -262,7 +271,7 @@ impl Foundry {
                     self.notice = Some(Notice {
                         text,
                         tone: Tone::Bad,
-                    })
+                    });
                 }
                 Event::Fatal(message) => {
                     self.fatal = Some(message);
@@ -388,7 +397,7 @@ impl Foundry {
                 self.notice = Some(Notice {
                     text,
                     tone: Tone::Good,
-                })
+                });
             }
             Outcome::Connected(gamertag) => {
                 self.device = None;
@@ -457,16 +466,16 @@ impl Foundry {
         self.selected = Some(id);
         if let Some(server) = self.data.server(id).cloned() {
             self.name.update(cx, |input, cx| {
-                input.set_value(server.config.name.clone(), window, cx)
+                input.set_value(server.config.name.clone(), window, cx);
             });
             self.port.update(cx, |input, cx| {
-                input.set_value(server.config.port.to_string(), window, cx)
+                input.set_value(server.config.port.to_string(), window, cx);
             });
             self.players.update(cx, |input, cx| {
-                input.set_value(server.config.max_players.to_string(), window, cx)
+                input.set_value(server.config.max_players.to_string(), window, cx);
             });
-            self.mode = server.config.gamemode.clone();
-            self.difficulty = server.config.difficulty.clone();
+            self.mode.clone_from(&server.config.gamemode);
+            self.difficulty.clone_from(&server.config.difficulty);
         }
         cx.notify();
     }
@@ -489,7 +498,7 @@ impl Foundry {
                 }
                 let port = self.free_port();
                 self.new_port.update(cx, |input, cx| {
-                    input.set_value(port.to_string(), window, cx)
+                    input.set_value(port.to_string(), window, cx);
                 });
             }
             _ => {}
@@ -534,7 +543,6 @@ impl Foundry {
 
     /// A row of mutually exclusive choices with a visible selected state.
     fn segmented(
-        &self,
         id: &'static str,
         options: &[(&'static str, &'static str)],
         current: &str,
@@ -581,6 +589,10 @@ impl Foundry {
         row
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Keep sidebar layout and its navigation handlers together"
+    )]
     fn rail(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let _ = window;
         let nav_item = |id: &'static str, label: String, active: bool| {
@@ -746,7 +758,7 @@ impl Foundry {
                                     }))
                                     .hover(|style| style.bg(rgb(0x323a3d)))
                                     .on_click(cx.listener(|this, _, window, cx| {
-                                        this.open(Page::NewServer, window, cx)
+                                        this.open(Page::NewServer, window, cx);
                                     }))
                                     .child("+ New server"),
                             ),
@@ -760,7 +772,7 @@ impl Foundry {
                             self.page == Page::Marketplace,
                         )
                         .on_click(cx.listener(|this, _, window, cx| {
-                            this.open(Page::Marketplace, window, cx)
+                            this.open(Page::Marketplace, window, cx);
                         })),
                     )
                     .child(
@@ -796,7 +808,7 @@ impl Foundry {
                             })
                             .hover(|style| style.bg(rgb(0x323a3d)))
                             .on_click(cx.listener(|this, _, window, cx| {
-                                this.open(Page::Account, window, cx)
+                                this.open(Page::Account, window, cx);
                             }))
                             .child(
                                 div()
@@ -894,7 +906,7 @@ fn page(heading: impl IntoElement, actions: Option<AnyElement>, content: impl In
                 .items_start()
                 .gap_4()
                 .child(div().flex_1().min_w_0().child(heading))
-                .when_some(actions, |this, actions| this.child(actions)),
+                .when_some(actions, gpui::ParentElement::child),
         )
         .child(content)
 }
@@ -935,7 +947,7 @@ impl Render for Foundry {
             }
         };
         let content_width =
-            (window.viewport_size().width.to_f64() as f32 - RAIL_WIDTH - 64.).clamp(560., 1080.);
+            (f32::from(window.viewport_size().width) - RAIL_WIDTH - 64.).clamp(560., 1080.);
         let detail = (self.page == Page::Marketplace)
             .then(|| self.listing_sheet(cx))
             .flatten();
@@ -969,8 +981,8 @@ impl Render for Foundry {
                     )
                     .child(self.status_bar(cx)),
             )
-            .when_some(detail, |this, detail| this.child(detail))
-            .when_some(dialog, |this, dialog| this.child(dialog))
+            .when_some(detail, gpui::ParentElement::child)
+            .when_some(dialog, gpui::ParentElement::child)
     }
 }
 
@@ -986,7 +998,7 @@ fn scrim(id: &'static str) -> Stateful<Div> {
         .occlude()
 }
 
-pub fn launch(root: Option<PathBuf>) -> Result<()> {
+pub fn launch(root: Option<PathBuf>) {
     Application::new().run(move |cx| {
         gpui_component::init(cx);
         Theme::change(ThemeMode::Light, None, cx);
@@ -1039,8 +1051,7 @@ pub fn launch(root: Option<PathBuf>) -> Result<()> {
         .detach();
         let viewport = cx
             .primary_display()
-            .map(|display| display.bounds().size)
-            .unwrap_or(size(px(1280.), px(900.)));
+            .map_or(size(px(1280.), px(900.)), |display| display.bounds().size);
         if let Err(error) = cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
@@ -1068,5 +1079,4 @@ pub fn launch(root: Option<PathBuf>) -> Result<()> {
         }
         cx.activate(true);
     });
-    Ok(())
 }

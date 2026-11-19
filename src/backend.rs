@@ -174,13 +174,6 @@ impl Backend {
         Ok(())
     }
     pub fn install(&mut self, server: Uuid, addon: Uuid) -> Result<()> {
-        self.processes.require_stopped(server)?;
-        let cached = self
-            .available
-            .get(&addon)
-            .context("Download this add-on first")?;
-        let directory = self.store.root.join("addons").join(addon.to_string());
-        let mut packs = Vec::new();
         fn collect(
             base: &std::path::Path,
             dir: &std::path::Path,
@@ -208,6 +201,14 @@ impl Backend {
             }
             Ok(())
         }
+
+        self.processes.require_stopped(server)?;
+        let cached = self
+            .available
+            .get(&addon)
+            .context("Download this add-on first")?;
+        let directory = self.store.root.join("addons").join(addon.to_string());
+        let mut packs = Vec::new();
         for manifest in &cached.manifests {
             let base = directory.join(manifest.header.uuid.to_string());
             let mut files = std::collections::BTreeMap::new();

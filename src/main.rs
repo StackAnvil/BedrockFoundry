@@ -51,7 +51,7 @@ enum AccountCommand {
     Login,
     Logout,
     Status,
-    /// Import a local MinecraftAuth account without printing credentials.
+    /// Import a local `MinecraftAuth` account without printing credentials.
     Import {
         path: PathBuf,
     },
@@ -146,7 +146,8 @@ fn run() -> Result<()> {
     if cli.command.is_none() {
         #[cfg(feature = "desktop")]
         {
-            return desktop::launch(cli.data_dir);
+            desktop::launch(cli.data_dir);
+            return Ok(());
         }
         #[cfg(not(feature = "desktop"))]
         {
@@ -223,7 +224,7 @@ fn run() -> Result<()> {
                                 let overlap=last.len().min(logs.len());let start=(0..=overlap).rev().find(|n|last[last.len()-n..]==logs[..*n]).unwrap_or(0);
                                 for line in &logs[start..]{println!("{line}");}
                                 std::io::stdout().flush()?;last=logs;
-                                if !backend.processes.running(id){break;}
+                                if !backend.processes.running(id)?{break;}
                             }
                         }
                     }

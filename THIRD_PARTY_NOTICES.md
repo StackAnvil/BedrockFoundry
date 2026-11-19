@@ -28,6 +28,9 @@ its missing-attribute constant on Linux and Android to libc::ENODATA. Current
 libc releases removed their historical ENOATTR alias. This preserves the old
 xattr API required by GPUI 0.2.2's tar dependency.
 
+Foundry also applies its Clippy checks to this copy. The attribute iterator
+stops if the operating system returns a name without a null terminator.
+
 ## Minecraft content
 
 BDS executables and Marketplace assets are downloaded separately from Microsoft

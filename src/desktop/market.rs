@@ -108,6 +108,10 @@ impl Foundry {
             )
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Keep the listing layout, filters, and pagination handlers together"
+    )]
     pub(super) fn marketplace_page(
         &mut self,
         window: &mut Window,
@@ -176,7 +180,7 @@ impl Foundry {
                     .label("Refresh")
                     .disabled(busy)
                     .on_click(cx.listener(|this, _, _, cx| {
-                        this.submit(Request::Balance, "Reading your Minecoin balance…", cx)
+                        this.submit(Request::Balance, "Reading your Minecoin balance…", cx);
                     })),
             );
         let search_text = self.search.read(cx).value().trim().to_string();
@@ -192,7 +196,7 @@ impl Foundry {
                     .disabled(busy)
                     .on_click(cx.listener(|this, _, _, cx| this.browse_from_start(cx))),
             )
-            .child(self.segmented(
+            .child(Self::segmented(
                 "scope",
                 &[("all", "Everything"), ("addons", "Add-ons only")],
                 if self.addons_only { "addons" } else { "all" },
@@ -306,8 +310,13 @@ impl Foundry {
                 .child(div().flex_1())
                 .child(muted("Newest first")),
         );
-        let width = window.viewport_size().width.to_f64() as f32 - RAIL_WIDTH - 64.;
-        let columns = ((width.min(1080.) + 16.) / 236.).floor().clamp(2., 5.) as u16;
+        let width = f32::from(window.viewport_size().width) - RAIL_WIDTH - 64.;
+        let cards_per_row = match (width.min(1080.) + 16.) / 236. {
+            value if value >= 5. => 5,
+            value if value >= 4. => 4,
+            value if value >= 3. => 3,
+            _ => 2,
+        };
         let mut cards: Vec<AnyElement> = Vec::new();
         for item in catalog.items.clone() {
             let id = item.id;
@@ -381,7 +390,7 @@ impl Foundry {
             ..query.clone()
         });
         let page_number = query.skip / PAGE_SIZE + 1;
-        let pages = catalog.total.div_ceil(PAGE_SIZE).max(1);
+        let total_pages = catalog.total.div_ceil(PAGE_SIZE).max(1);
         let pager = div()
             .flex()
             .items_center()
@@ -399,13 +408,13 @@ impl Foundry {
                             Request::Browse(previous.clone()),
                             "Loading the previous page…",
                             cx,
-                        )
+                        );
                     })),
             )
             .child(muted(format!(
                 "Page {} of {}",
                 group(page_number),
-                group(pages)
+                group(total_pages)
             )))
             .child(
                 Button::new("next-page")
@@ -415,7 +424,7 @@ impl Foundry {
                     .on_click(cx.listener(move |this, _, _, cx| {
                         if let Some(next) = next.clone() {
                             this.detail = None;
-                            this.submit(Request::Browse(next), "Loading the next page…", cx)
+                            this.submit(Request::Browse(next), "Loading the next page…", cx);
                         }
                     })),
             );
@@ -428,16 +437,22 @@ impl Foundry {
         let mut cards = cards.into_iter().peekable();
         while cards.peek().is_some() {
             let mut row = div().flex().gap_4();
-            for _ in 0..columns {
+            for _ in 0..cards_per_row {
                 row = row.child(div().flex_1().min_w_0().flex().children(cards.next()));
             }
             grid = grid.child(row);
         }
-        body = body.child(grid).when(pages > 1, |this| this.child(pager));
+        body = body
+            .child(grid)
+            .when(total_pages > 1, |this| this.child(pager));
         page(intro, Some(wallet.into_any_element()), body).into_any_element()
     }
 
     /// The right-hand sheet with one listing's description and actions.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Keep listing details and their actions together"
+    )]
     pub(super) fn listing_sheet(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let id = self.detail?;
         let item = self
@@ -485,7 +500,7 @@ impl Foundry {
                                         Request::Download(id),
                                         "Downloading and decrypting your add-on…",
                                         cx,
-                                    )
+                                    );
                                 })),
                         ),
                     );
@@ -506,7 +521,7 @@ impl Foundry {
                                         Request::Claim(id),
                                         "Adding the free add-on to your library…",
                                         cx,
-                                    )
+                                    );
                                 })),
                         ),
                     );
@@ -536,7 +551,7 @@ impl Foundry {
                                         Request::Quote(id),
                                         "Checking the current price and your balance…",
                                         cx,
-                                    )
+                                    );
                                 })),
                         ),
                     );
@@ -639,6 +654,10 @@ impl Foundry {
     }
 
     /// The purchase dialog. It covers the window so no other action can run.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Keep the purchase confirmation states and their handlers together"
+    )]
     pub(super) fn purchase_dialog(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let state = self.purchase.clone()?;
         let mut card = div()
@@ -844,7 +863,7 @@ impl Foundry {
                                             Request::Download(id),
                                             "Downloading and decrypting your add-on…",
                                             cx,
-                                        )
+                                        );
                                     })),
                             )
                         }));
@@ -957,7 +976,7 @@ fn requote(
                 Request::Quote(id),
                 "Checking the current price and your balance…",
                 cx,
-            )
+            );
         }))
 }
 

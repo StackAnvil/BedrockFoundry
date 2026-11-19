@@ -64,7 +64,11 @@ pub async fn bounded_response(mut response: Response, limit: usize) -> Result<Ve
         "Download exceeds the size limit"
     );
     let mut bytes = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(|e| e.without_url())? {
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(reqwest::Error::without_url)?
+    {
         ensure!(
             bytes
                 .len()
@@ -86,7 +90,8 @@ async fn json_response(response: Response) -> Result<Value> {
 #[serde(rename_all = "PascalCase")]
 struct Receipt {
     entity_id: String,
-    receipt_data: ReceiptData,
+    #[serde(rename = "ReceiptData")]
+    data: ReceiptData,
     entitlement_receipts: Vec<Entitlement>,
 }
 #[derive(Deserialize)]
@@ -161,7 +166,7 @@ pub fn receipt_keys(
 ) -> Result<HashMap<Uuid, Zeroizing<Vec<u8>>>> {
     let receipt = decode_receipt(encoded)?;
     let entity = receipt.entity_id.as_bytes();
-    let device = receipt.receipt_data.device_id.as_bytes();
+    let device = receipt.data.device_id.as_bytes();
     ensure!(
         entity.len() >= 32 && device.len() >= 32,
         "Entitlement receipt has an invalid identity"
@@ -205,7 +210,7 @@ async fn inventory_receipt(services: &mut Minecraft, http: &Client) -> Result<Ze
         .header("Authorization", auth.header_value()?)
         .send()
         .await
-        .map_err(|e| e.without_url())?;
+        .map_err(reqwest::Error::without_url)?;
     let status = response.status();
     if status == reqwest::StatusCode::UNAUTHORIZED {
         services.reject(&auth);
@@ -239,7 +244,7 @@ async fn catalog(
         .json(&body)
         .send()
         .await
-        .map_err(|e| e.without_url())?;
+        .map_err(reqwest::Error::without_url)?;
     json_response(response)
         .await
         .with_context(|| format!("Marketplace catalog {method} failed"))
@@ -249,11 +254,17 @@ fn version(value: &str) -> Result<[u32; 3]> {
         .split('.')
         .map(str::parse)
         .collect::<std::result::Result<Vec<u32>, _>>()?;
-    parts
-        .try_into()
-        .map_err(|_| anyhow::anyhow!("Catalog has an invalid pack version"))
+    parts.try_into().map_err(|parts: Vec<u32>| {
+        anyhow::anyhow!(
+            "Catalog pack version has {} components, expected 3",
+            parts.len()
+        )
+    })
 }
-pub fn parse_addon(value: &Value, owned: &HashSet<Uuid>) -> Result<Option<Addon>> {
+pub fn parse_addon<S: std::hash::BuildHasher>(
+    value: &Value,
+    owned: &HashSet<Uuid, S>,
+) -> Result<Option<Addon>> {
     if !value["Tags"]
         .as_array()
         .is_some_and(|tags| tags.iter().any(|tag| tag.as_str() == Some("addon")))
@@ -352,7 +363,7 @@ pub async fn list(services: &mut Minecraft, http: &Client) -> Result<Vec<Addon>>
 }
 
 pub async fn free_sample(services: &mut Minecraft, http: &Client) -> Result<Addon> {
-    let owned = inventory(services, http).await?.into_keys().collect();
+    let owned: HashSet<_> = inventory(services, http).await?.into_keys().collect();
     let published = catalog(
         services,
         http,
@@ -385,7 +396,7 @@ pub async fn claim_free(services: &mut Minecraft, http: &Client, id: Uuid) -> Re
         "This offer is not an add-on"
     );
     let auth = services.authorize().await?;
-    let response = http.post("https://entitlements.mktpl.minecraft-services.net/api/v1.0/transaction/virtual").header("Authorization",auth.header_value()?).json(&json!({"CustomTags":{"CorrelationId":Uuid::new_v4()},"OfferId":id,"StoreId":"","VirtualCurrency":{"Amount":"0","Type":"Minecoin"}})).send().await.map_err(|e|e.without_url())?;
+    let response = http.post("https://entitlements.mktpl.minecraft-services.net/api/v1.0/transaction/virtual").header("Authorization",auth.header_value()?).json(&json!({"CustomTags":{"CorrelationId":Uuid::new_v4()},"OfferId":id,"StoreId":"","VirtualCurrency":{"Amount":"0","Type":"Minecoin"}})).send().await.map_err(reqwest::Error::without_url)?;
     let result = json_response(response).await?;
     ensure!(
         result["result"]["offerId"].as_str() == Some(&id.to_string()),
@@ -436,7 +447,7 @@ pub async fn download(
     )
     .await?;
     let item = &published["data"]["Item"];
-    let current = parse_addon(item, &keys.keys().copied().collect())?
+    let current = parse_addon(item, &keys.keys().copied().collect::<HashSet<_>>())?
         .context("Catalog item is no longer an add-on")?;
     ensure!(
         current
@@ -463,11 +474,11 @@ pub async fn download(
         .header("User-Agent", "libhttpclient/1.0.0.0")
         .send()
         .await
-        .map_err(|e| e.without_url())?;
+        .map_err(reqwest::Error::without_url)?;
     let bytes = bounded_response(response, MAX_ARCHIVE)
         .await
         .context("Marketplace asset download failed")?;
-    let expected = addon.packs.iter().map(|p| (p.uuid, p.version)).collect();
+    let expected: HashMap<_, _> = addon.packs.iter().map(|p| (p.uuid, p.version)).collect();
     if bytes.is_empty() {
         bail!("Marketplace returned an empty add-on download");
     }

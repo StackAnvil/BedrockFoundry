@@ -3,7 +3,7 @@
 //! The palette follows bedrock strata: a deepslate rail, pale stone surfaces,
 //! moss for actions that move setup forward, and gold reserved for Minecoins.
 
-use gpui::{prelude::*, *};
+use gpui::{Div, FontWeight, SharedString, div, prelude::*, px, rgb};
 
 pub const DEEPSLATE: u32 = 0x2b3134;
 pub const DEEPSLATE_RAISED: u32 = 0x373e42;

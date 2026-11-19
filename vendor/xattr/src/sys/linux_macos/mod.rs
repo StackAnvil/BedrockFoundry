@@ -2,13 +2,13 @@
 mod linux;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use self::linux::*;
+use self::linux::{fgetxattr, flistxattr, fremovexattr, fsetxattr, lgetxattr, llistxattr, lremovexattr, lsetxattr};
 
 #[cfg(target_os = "macos")]
 mod macos;
 
 #[cfg(target_os = "macos")]
-use self::macos::*;
+use self::macos::{fgetxattr, flistxattr, fremovexattr, fsetxattr, lgetxattr, llistxattr, lremovexattr, lsetxattr};
 
 use std::ffi::{OsStr, OsString};
 use std::io;
@@ -38,7 +38,7 @@ impl Clone for XAttrs {
         self.offset = other.offset;
 
         let mut data = mem::replace(&mut self.data, Box::new([])).into_vec();
-        data.extend(other.data.iter().cloned());
+        data.extend(other.data.iter().copied());
         self.data = data.into_boxed_slice();
     }
 }
@@ -50,14 +50,9 @@ impl Iterator for XAttrs {
     type Item = OsString;
     fn next(&mut self) -> Option<OsString> {
         let data = &self.data[self.offset..];
-        if data.is_empty() {
-            None
-        } else {
-            // always null terminated (unless empty).
-            let end = data.iter().position(|&b| b == 0u8).unwrap();
-            self.offset += end + 1;
-            Some(OsStr::from_bytes(&data[..end]).to_owned())
-        }
+        let end = data.iter().position(|&byte| byte == 0)?;
+        self.offset += end + 1;
+        Some(OsStr::from_bytes(&data[..end]).to_owned())
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -72,7 +67,7 @@ impl Iterator for XAttrs {
 pub fn get_fd(fd: RawFd, name: &OsStr) -> io::Result<Vec<u8>> {
     let name = name_to_c(name)?;
     unsafe {
-        allocate_loop(|buf, len| fgetxattr(fd, name.as_ptr(), buf as *mut c_void, len as size_t))
+        allocate_loop(|buf, len| fgetxattr(fd, name.as_ptr(), buf.cast::<c_void>(), len as size_t))
     }
 }
 
@@ -82,7 +77,7 @@ pub fn set_fd(fd: RawFd, name: &OsStr, value: &[u8]) -> io::Result<()> {
         fsetxattr(
             fd,
             name.as_ptr(),
-            value.as_ptr() as *const c_void,
+            value.as_ptr().cast::<c_void>(),
             value.len() as size_t,
         )
     };
@@ -105,7 +100,7 @@ pub fn remove_fd(fd: RawFd, name: &OsStr) -> io::Result<()> {
 
 pub fn list_fd(fd: RawFd) -> io::Result<XAttrs> {
     let vec =
-        unsafe { allocate_loop(|buf, len| flistxattr(fd, buf as *mut c_char, len as size_t))? };
+        unsafe { allocate_loop(|buf, len| flistxattr(fd, buf.cast::<c_char>(), len as size_t))? };
     Ok(XAttrs {
         data: vec.into_boxed_slice(),
         offset: 0,
@@ -120,7 +115,7 @@ pub fn get_path(path: &Path, name: &OsStr) -> io::Result<Vec<u8>> {
             lgetxattr(
                 path.as_ptr(),
                 name.as_ptr(),
-                buf as *mut c_void,
+                buf.cast::<c_void>(),
                 len as size_t,
             )
         })
@@ -134,7 +129,7 @@ pub fn set_path(path: &Path, name: &OsStr, value: &[u8]) -> io::Result<()> {
         lsetxattr(
             path.as_ptr(),
             name.as_ptr(),
-            value.as_ptr() as *const c_void,
+            value.as_ptr().cast::<c_void>(),
             value.len() as size_t,
         )
     };
@@ -159,7 +154,7 @@ pub fn remove_path(path: &Path, name: &OsStr) -> io::Result<()> {
 pub fn list_path(path: &Path) -> io::Result<XAttrs> {
     let path = path_to_c(path)?;
     let vec = unsafe {
-        allocate_loop(|buf, len| llistxattr(path.as_ptr(), buf as *mut c_char, len as size_t))?
+        allocate_loop(|buf, len| llistxattr(path.as_ptr(), buf.cast::<c_char>(), len as size_t))?
     };
     Ok(XAttrs {
         data: vec.into_boxed_slice(),

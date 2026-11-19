@@ -1,4 +1,4 @@
-use super::*;
+use super::{Backend, Context, Result, Uuid, ensure, marketplace};
 use marketplace::{CatalogQuery, PurchaseAttempt, PurchaseQuote, TransactionFailure};
 use sha2::{Digest, Sha256};
 
@@ -105,25 +105,21 @@ impl Backend {
         // An authorization checkpoint failure must not turn an accepted charge
         // into an apparent rejection. The durable journal still blocks repeats.
         let _ = self.accounts.persist();
-        match result {
-            Err(error) => {
-                if matches!(
-                    error,
-                    TransactionFailure::NotSubmitted | TransactionFailure::Rejected(_)
-                ) {
-                    PurchaseAttempt::clear(&self.store, &account, quote.item.id)?;
-                }
-                Err(error.into())
+        if let Err(error) = result {
+            if matches!(
+                error,
+                TransactionFailure::NotSubmitted | TransactionFailure::Rejected(_)
+            ) {
+                PurchaseAttempt::clear(&self.store, &account, quote.item.id)?;
             }
-            Ok(()) => {
-                attempt.accepted = true;
-                let _ = attempt.save(&self.store, &quote);
-                let ready = self.refresh_library().await.is_ok()
-                    && self.library.iter().any(|addon| addon.id == quote.item.id);
-                let _ = self.refresh_balance().await;
-                Ok(ready)
-            }
+            return Err(error.into());
         }
+        attempt.accepted = true;
+        let _ = attempt.save(&self.store, &quote);
+        let ready = self.refresh_library().await.is_ok()
+            && self.library.iter().any(|addon| addon.id == quote.item.id);
+        let _ = self.refresh_balance().await;
+        Ok(ready)
     }
     pub(super) async fn reconcile_owned_purchases(&mut self) -> Result<()> {
         let account = self.purchase_account().await?;

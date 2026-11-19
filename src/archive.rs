@@ -118,7 +118,7 @@ fn read_zip_with_budget(bytes: &[u8], budget: &mut u64) -> Result<BTreeMap<Strin
         let name = file.name().to_owned();
         safe_relative(name.trim_end_matches('/'))?;
         ensure!(
-            file.unix_mode().is_none_or(|m| m & 0o170000 != 0o120000),
+            file.unix_mode().is_none_or(|m| m & 0o170_000 != 0o120_000),
             "Archive contains a symbolic link"
         );
         if file.is_dir() {
@@ -150,15 +150,20 @@ pub fn decrypt(data: &[u8], key: &[u8]) -> Result<Vec<u8>> {
     ensure!(key.len() == 32, "Invalid Marketplace content key length");
     let mut result = data.to_vec();
     cfb8::Decryptor::<aes::Aes256>::new_from_slices(key, &key[..16])
-        .map_err(|_| anyhow::anyhow!("Invalid Marketplace cipher parameters"))?
+        .map_err(|error| anyhow::anyhow!(error))
+        .context("Invalid Marketplace cipher parameters")?
         .decrypt(&mut result);
     Ok(result)
 }
 
-pub fn decode_bundle(
+#[expect(
+    clippy::case_sensitive_file_extension_comparisons,
+    reason = "Preserve the archive admission rule for lowercase wrapper suffixes"
+)]
+pub fn decode_bundle<K: std::hash::BuildHasher, S: std::hash::BuildHasher>(
     bytes: &[u8],
-    keys: &HashMap<Uuid, Zeroizing<Vec<u8>>>,
-    expected: &HashMap<Uuid, [u32; 3]>,
+    keys: &HashMap<Uuid, Zeroizing<Vec<u8>>, K>,
+    expected: &HashMap<Uuid, [u32; 3], S>,
 ) -> Result<Vec<DecodedPack>> {
     let mut budget = 0;
     let outer = read_zip_with_budget(bytes, &mut budget)?;
@@ -200,14 +205,6 @@ pub fn decode_bundle(
             .context("This account has no current entitlement key for this pack")?;
         let mut decoded = BTreeMap::new();
         if let Some(index) = files.get("contents.json") {
-            let id = identity.to_string();
-            ensure!(
-                index.len() >= 256
-                    && index[4..8] == [0xfc, 0xb9, 0xcf, 0x9b]
-                    && index[16] == 36
-                    && index[17..53] == *id.as_bytes(),
-                "Invalid encrypted pack index"
-            );
             #[derive(Deserialize)]
             struct Index {
                 content: Vec<Content>,
@@ -217,6 +214,15 @@ pub fn decode_bundle(
                 path: String,
                 key: Option<String>,
             }
+
+            let id = identity.to_string();
+            ensure!(
+                index.len() >= 256
+                    && index[4..8] == [0xfc, 0xb9, 0xcf, 0x9b]
+                    && index[16] == 36
+                    && index[17..53] == *id.as_bytes(),
+                "Invalid encrypted pack index"
+            );
             let index: Index = serde_json::from_slice(&decrypt(&index[256..], key)?)
                 .context("The account key cannot decrypt this pack index")?;
             for entry in index.content {

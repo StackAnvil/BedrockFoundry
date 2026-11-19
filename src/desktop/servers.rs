@@ -1,6 +1,7 @@
 //! Server setup, process control, console, add-ons, settings, and backups.
 
 use super::*;
+use anyhow::Result;
 use bedrock_foundry::server::ServerConfig;
 use gpui_component::{input::Input, switch::Switch};
 
@@ -76,7 +77,7 @@ fn step(number: u8, heading: &str, text: &str, stage: Stage, body: Option<AnyEle
                     div()
                         .font_weight(FontWeight::MEDIUM)
                         .when(stage != Stage::Current, |this| this.text_color(rgb(MUTED)))
-                        .when(stage == Stage::Current, |this| this.text_base())
+                        .when(stage == Stage::Current, gpui::Styled::text_base)
                         .child(heading.to_owned()),
                 )
                 .child(muted(text.to_owned()))
@@ -221,6 +222,10 @@ impl Foundry {
         .into_any_element()
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Keep server navigation and its actions together"
+    )]
     pub(super) fn server_page(
         &mut self,
         window: &mut Window,
@@ -260,7 +265,7 @@ impl Foundry {
                             Request::Stop(id),
                             "Stopping server and saving the world…",
                             cx,
-                        )
+                        );
                     }))
             } else {
                 Button::new("start-server")
@@ -273,7 +278,7 @@ impl Foundry {
                     .disabled(busy)
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.server_tab = ServerTab::Console;
-                        this.submit(Request::Start(id), "Starting Bedrock Dedicated Server…", cx)
+                        this.submit(Request::Start(id), "Starting Bedrock Dedicated Server…", cx);
                     }))
             });
         }
@@ -388,7 +393,7 @@ impl Foundry {
                                     Request::Provision(id),
                                     "Downloading Bedrock Dedicated Server from Minecraft…",
                                     cx,
-                                )
+                                );
                             })),
                     )
                     .child(
@@ -498,6 +503,10 @@ impl Foundry {
             .into_any_element()
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Keep the add-on list and installation controls together"
+    )]
     fn addons_tab(&mut self, server: &ServerView, cx: &mut Context<Self>) -> AnyElement {
         let id = server.config.id;
         let busy = self.busy();
@@ -565,7 +574,7 @@ impl Foundry {
                             .small()
                             .label("Open My add-ons")
                             .on_click(cx.listener(|this, _, window, cx| {
-                                this.open(Page::Library, window, cx)
+                                this.open(Page::Library, window, cx);
                             })),
                     ),
             );
@@ -605,7 +614,7 @@ impl Foundry {
                                     Request::Install(id, addon_id),
                                     "Installing add-on packs…",
                                     cx,
-                                )
+                                );
                             })),
                     ),
             );
@@ -613,6 +622,10 @@ impl Foundry {
         body.child(available).into_any_element()
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Keep settings fields and their event handlers together"
+    )]
     fn settings_tab(
         &mut self,
         server: &ServerView,
@@ -668,7 +681,7 @@ impl Foundry {
             )
             .child(field(
                 "Game mode",
-                div().flex().child(self.segmented(
+                div().flex().child(Self::segmented(
                     "mode",
                     &MODES,
                     &self.mode,
@@ -680,7 +693,7 @@ impl Foundry {
             ))
             .child(field(
                 "Difficulty",
-                div().flex().child(self.segmented(
+                div().flex().child(Self::segmented(
                     "difficulty",
                     &DIFFICULTIES,
                     &self.difficulty,
@@ -708,7 +721,7 @@ impl Foundry {
                                 match this.form_config(&server.config, cx) {
                                     Ok(config) => {
                                         this.resync_form = true;
-                                        this.submit(Request::Save(config), "Saving settings…", cx)
+                                        this.submit(Request::Save(config), "Saving settings…", cx);
                                     }
                                     Err(error) => this.fail(format!("{error:#}"), cx),
                                 }
@@ -808,8 +821,8 @@ impl Foundry {
             .trim()
             .parse()
             .context("Enter a player limit from 1 to 100")?;
-        config.gamemode = self.mode.clone();
-        config.difficulty = self.difficulty.clone();
+        config.gamemode.clone_from(&self.mode);
+        config.difficulty.clone_from(&self.difficulty);
         config.validate()?;
         Ok(config)
     }
@@ -840,8 +853,7 @@ impl Foundry {
             .when_some(last, |this, path| {
                 let file = path
                     .file_name()
-                    .map(|name| name.to_string_lossy().into_owned())
-                    .unwrap_or_default();
+                    .map_or_default(|name| name.to_string_lossy().into_owned());
                 this.child(callout(
                     Tone::Good,
                     format!("Saved {file} in the backups folder."),
@@ -857,7 +869,7 @@ impl Foundry {
                             .label("Back up now")
                             .disabled(self.busy() || server.running)
                             .on_click(cx.listener(move |this, _, _, cx| {
-                                this.submit(Request::Backup(id), "Creating backup…", cx)
+                                this.submit(Request::Backup(id), "Creating backup…", cx);
                             })),
                     )
                     .child(

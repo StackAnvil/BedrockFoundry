@@ -94,17 +94,17 @@ impl ServerConfig {
             ),
             (
                 "server-udp-ports",
-                self.public_address
-                    .filter(|_| self.public)
-                    .map(|ip| match ip {
+                self.public_address.filter(|_| self.public).map_or_else(
+                    || (self.port + 1).to_string(),
+                    |ip| match ip {
                         std::net::IpAddr::V4(ip) => {
                             format!("{ip}:{}:{}", self.port + 1, self.port + 1)
                         }
                         std::net::IpAddr::V6(ip) => {
                             format!("[{ip}]:{}:{}", self.port + 1, self.port + 1)
                         }
-                    })
-                    .unwrap_or_else(|| (self.port + 1).to_string()),
+                    },
+                ),
             ),
             ("enable-lan-visibility", "false".into()),
             ("transport", "nethernet".into()),
@@ -132,6 +132,7 @@ impl ServerConfig {
     }
 }
 
+#[must_use]
 pub fn home(root: &Path, id: Uuid) -> PathBuf {
     root.join("servers").join(id.to_string())
 }
@@ -196,7 +197,7 @@ pub async fn download_server(
         http.get("https://net-secondary.web.minecraft-services.net/api/v1.0/download/links")
             .send()
             .await
-            .map_err(|e| e.without_url())?,
+            .map_err(reqwest::Error::without_url)?,
         1024 * 1024,
     )
     .await?;
@@ -240,7 +241,10 @@ pub async fn download_server(
         "BDS download has an invalid version"
     );
     let bytes = bounded_response(
-        http.get(url).send().await.map_err(|e| e.without_url())?,
+        http.get(url)
+            .send()
+            .await
+            .map_err(reqwest::Error::without_url)?,
         MAX_ARCHIVE,
     )
     .await?;
@@ -312,6 +316,10 @@ pub fn import_distribution(
     save(root, config)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "Keep file staging, activation, and recovery journal handling together"
+)]
 pub fn install_addon(
     root: &Path,
     config: &mut ServerConfig,
@@ -334,9 +342,12 @@ pub fn install_addon(
         .take(3)
         .map(str::parse)
         .collect::<std::result::Result<Vec<u32>, _>>()?;
-    let engine: [u32; 3] = server_version
-        .try_into()
-        .map_err(|_| anyhow::anyhow!("Invalid BDS version"))?;
+    let engine: [u32; 3] = server_version.try_into().map_err(|parts: Vec<u32>| {
+        anyhow::anyhow!(
+            "BDS version has {} components, expected at least 3",
+            parts.len()
+        )
+    })?;
     let home = home(root, config.id);
     let world = home.join("worlds/world");
     private_dir(&world)?;
@@ -578,22 +589,28 @@ pub struct Processes {
     entries: Arc<Mutex<HashMap<Uuid, Managed>>>,
 }
 impl Processes {
-    pub fn running(&self, id: Uuid) -> bool {
+    pub fn running(&self, id: Uuid) -> Result<bool> {
+        Ok(self.entries()?.get_mut(&id).is_some_and(Managed::running))
+    }
+
+    fn entries(&self) -> Result<std::sync::MutexGuard<'_, HashMap<Uuid, Managed>>> {
         self.entries
             .lock()
-            .expect("process registry lock")
-            .get_mut(&id)
-            .is_some_and(Managed::running)
+            .map_err(|error| anyhow::anyhow!("{error}"))
     }
     pub fn require_stopped(&self, id: Uuid) -> Result<()> {
         ensure!(
-            !self.running(id),
+            !self.running(id)?,
             "Stop this server before changing files or creating a backup"
         );
         Ok(())
     }
     pub fn start(&self, root: &Path, config: &ServerConfig) -> Result<()> {
-        ensure!(!self.running(config.id), "This server is already running");
+        let mut entries = self.entries()?;
+        ensure!(
+            !entries.get_mut(&config.id).is_some_and(Managed::running),
+            "This server is already running"
+        );
         let home = home(root, config.id);
         ensure!(
             config.version.is_some() && home.join(BINARY).is_file(),
@@ -614,7 +631,7 @@ impl Processes {
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
-            command.creation_flags(0x08000000);
+            command.creation_flags(0x0800_0000);
         }
         let mut child = command
             .spawn()
@@ -628,7 +645,7 @@ impl Processes {
         if let Some(out) = child.stderr.take() {
             capture(out, lines.clone(), file);
         }
-        self.entries.lock().expect("process registry lock").insert(
+        entries.insert(
             config.id,
             Managed {
                 child,
@@ -639,9 +656,7 @@ impl Processes {
         Ok(())
     }
     pub fn stop(&self, id: Uuid) -> Result<()> {
-        self.entries
-            .lock()
-            .expect("process registry lock")
+        self.entries()?
             .get_mut(&id)
             .context("This server is not running")?
             .stop()
@@ -654,17 +669,13 @@ impl Processes {
         }
     }
     pub fn command(&self, id: Uuid, text: &str) -> Result<()> {
-        ensure!(
-            self.running(id),
-            "Start the server before sending a command"
-        );
-        self.entries
-            .lock()
-            .expect("process registry lock")
-            .get_mut(&id)
-            .context("Server process disappeared")?
-            .command(text)
+        let mut entries = self.entries()?;
+        let message = "Start the server before sending a command";
+        let process = entries.get_mut(&id).context(message)?;
+        ensure!(process.running(), "{message}");
+        process.command(text)
     }
+    #[must_use]
     pub fn logs(&self, id: Uuid) -> Vec<String> {
         self.entries
             .lock()
@@ -704,41 +715,42 @@ fn capture(
 }
 
 pub fn backup(root: &Path, config: &ServerConfig) -> Result<PathBuf> {
+    fn append(zip: &mut ZipWriter<&mut File>, base: &Path, path: &Path) -> Result<()> {
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            let metadata = fs::symlink_metadata(entry.path())?;
+            ensure!(
+                !metadata.file_type().is_symlink(),
+                "Backup refuses symbolic links"
+            );
+            if metadata.is_dir() {
+                append(zip, base, &entry.path())?;
+            } else if metadata.is_file() {
+                let name = entry
+                    .path()
+                    .strip_prefix(base)?
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                if name == BINARY || name == "console.log" || name.starts_with("profiles/") {
+                    continue;
+                }
+                zip.start_file(
+                    name,
+                    SimpleFileOptions::default()
+                        .compression_method(zip::CompressionMethod::Deflated),
+                )?;
+                std::io::copy(&mut File::open(entry.path())?, zip)?;
+            }
+        }
+        Ok(())
+    }
+
     let home = home(root, config.id);
     let destination = root.join("backups");
     private_dir(&destination)?;
     let mut temp = tempfile::NamedTempFile::new_in(&destination)?;
     {
         let mut zip = ZipWriter::new(temp.as_file_mut());
-        fn append(zip: &mut ZipWriter<&mut File>, base: &Path, path: &Path) -> Result<()> {
-            for entry in fs::read_dir(path)? {
-                let entry = entry?;
-                let metadata = fs::symlink_metadata(entry.path())?;
-                ensure!(
-                    !metadata.file_type().is_symlink(),
-                    "Backup refuses symbolic links"
-                );
-                if metadata.is_dir() {
-                    append(zip, base, &entry.path())?;
-                } else if metadata.is_file() {
-                    let name = entry
-                        .path()
-                        .strip_prefix(base)?
-                        .to_string_lossy()
-                        .replace('\\', "/");
-                    if name == BINARY || name == "console.log" || name.starts_with("profiles/") {
-                        continue;
-                    }
-                    zip.start_file(
-                        name,
-                        SimpleFileOptions::default()
-                            .compression_method(zip::CompressionMethod::Deflated),
-                    )?;
-                    std::io::copy(&mut File::open(entry.path())?, zip)?;
-                }
-            }
-            Ok(())
-        }
         append(&mut zip, &home, &home)?;
         zip.finish()?;
     }

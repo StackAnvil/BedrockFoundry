@@ -21,7 +21,7 @@ impl Foundry {
                             .small()
                             .label("New server")
                             .on_click(cx.listener(|this, _, window, cx| {
-                                this.open(Page::NewServer, window, cx)
+                                this.open(Page::NewServer, window, cx);
                             })),
                     ),
             );
@@ -51,7 +51,7 @@ impl Foundry {
                         div()
                             .flex_1()
                             .min_w_0()
-                            .child(div().truncate().child(server.config.name.clone()))
+                            .child(div().truncate().child(server.config.name))
                             .when_some(reason, |this, reason| {
                                 this.child(div().text_xs().text_color(rgb(MUTED)).child(reason))
                             }),
@@ -69,7 +69,7 @@ impl Foundry {
                                     Request::Install(server_id, addon),
                                     "Installing add-on packs…",
                                     cx,
-                                )
+                                );
                             }))
                             .into_any_element()
                     }),
@@ -78,7 +78,7 @@ impl Foundry {
         list
     }
 
-    fn addon_row(&mut self, addon: Addon, cx: &mut Context<Self>) -> Div {
+    fn addon_row(&mut self, addon: &Addon, cx: &mut Context<Self>) -> Div {
         let id = addon.id;
         let downloaded = self.data.is_downloaded(id);
         let open = self.install_open == Some(id);
@@ -115,7 +115,7 @@ impl Foundry {
                         Request::Download(id),
                         "Downloading and decrypting your add-on…",
                         cx,
-                    )
+                    );
                 }))
         };
         panel()
@@ -173,6 +173,10 @@ impl Foundry {
             })
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Keep the library view and its empty and loading states together"
+    )]
     pub(super) fn library_page(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let busy = self.busy();
         let connected = self.connected();
@@ -190,7 +194,7 @@ impl Foundry {
                         .label("Try a free add-on")
                         .disabled(busy)
                         .on_click(cx.listener(|this, _, _, cx| {
-                            this.submit(Request::Sample, "Loading the free sample add-on…", cx)
+                            this.submit(Request::Sample, "Loading the free sample add-on…", cx);
                         })),
                 )
                 .child(
@@ -199,7 +203,7 @@ impl Foundry {
                         .label("Refresh")
                         .disabled(busy)
                         .on_click(cx.listener(|this, _, _, cx| {
-                            this.submit(Request::Library, "Reading your Marketplace library…", cx)
+                            this.submit(Request::Library, "Reading your Marketplace library…", cx);
                         })),
                 )
                 .into_any_element()
@@ -240,7 +244,7 @@ impl Foundry {
                                     Request::Claim(id),
                                     "Adding the free add-on to your library…",
                                     cx,
-                                )
+                                );
                             })),
                     ),
             );
@@ -291,14 +295,14 @@ impl Foundry {
                                     .label("Browse the Marketplace")
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.addons_only = true;
-                                        this.open(Page::Marketplace, window, cx)
+                                        this.open(Page::Marketplace, window, cx);
                                     })),
                             ),
                         ),
                 );
             }
         } else {
-            for addon in addons {
+            for addon in &addons {
                 body = body.child(self.addon_row(addon, cx));
             }
         }

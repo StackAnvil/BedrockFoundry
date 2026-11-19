@@ -4,6 +4,10 @@ use super::*;
 use std::sync::atomic::Ordering;
 
 impl Foundry {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Keep account page layout and its event handlers together"
+    )]
     pub(super) fn account_page(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let busy = self.busy();
         let intro = heading(
@@ -53,7 +57,7 @@ impl Foundry {
                                         .on_click(move |_, _, cx| {
                                             cx.write_to_clipboard(ClipboardItem::new_string(
                                                 copy.clone(),
-                                            ))
+                                            ));
                                         }),
                                 ),
                         )
@@ -136,7 +140,7 @@ impl Foundry {
                                         Request::Logout,
                                         "Disconnecting Microsoft account…",
                                         cx,
-                                    )
+                                    );
                                 })),
                         ),
                 )
@@ -163,7 +167,7 @@ impl Foundry {
                             })
                             .disabled(busy)
                             .on_click(cx.listener(|this, _, _, cx| {
-                                this.submit(Request::Login, "Starting Microsoft sign-in…", cx)
+                                this.submit(Request::Login, "Starting Microsoft sign-in…", cx);
                             })),
                     ),
                 )

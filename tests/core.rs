@@ -411,8 +411,9 @@ fn stopping_a_managed_server_sends_stop_and_waits_for_its_exit() {
     let processes = server::Processes::default();
     processes.start(&store.root, &config).unwrap();
     assert!(processes.require_stopped(config.id).is_err());
-    processes.clone().stop_all();
-    assert!(!processes.running(config.id));
+    assert!(processes.start(&store.root, &config).is_err());
+    processes.stop_all();
+    assert!(!processes.running(config.id).unwrap());
     assert_eq!(
         std::fs::read(home.join("stopped")).unwrap(),
         b"graceful exit"

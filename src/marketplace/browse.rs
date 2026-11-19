@@ -1,4 +1,8 @@
-use super::*;
+use super::{
+    Addon, Client, Context, Deserialize, HashSet, Minecraft, OffsetDateTime, Result, Serialize,
+    Uuid, Value, active, catalog, decode_receipt, ensure, inventory_receipt, json, parse_addon,
+    validate_asset_url,
+};
 
 pub const PAGE_SIZE: u64 = 24;
 
@@ -159,6 +163,7 @@ impl CatalogItem {
             addon,
         })
     }
+    #[must_use]
     pub fn price_label(&self) -> String {
         if self.owned {
             "Owned".into()
@@ -189,7 +194,7 @@ impl CatalogPage {
             .as_array()
             .context("Catalog response has no items")?;
         ensure!(
-            records.len() <= PAGE_SIZE as usize,
+            u64::try_from(records.len())? <= PAGE_SIZE,
             "Catalog returned too many listings"
         );
         let next = query

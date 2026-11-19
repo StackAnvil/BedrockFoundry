@@ -1,5 +1,4 @@
 use std::ffi::CString;
-use std::ffi::OsStr;
 use std::io;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
@@ -12,8 +11,8 @@ use libc::{ssize_t, ERANGE};
 // our platform-specific modules.
 use sys::ENOATTR;
 
-#[allow(dead_code)]
-pub fn name_to_c(name: &OsStr) -> io::Result<CString> {
+#[cfg(any(target_os = "android", target_os = "linux", target_os = "macos"))]
+pub fn name_to_c(name: &std::ffi::OsStr) -> io::Result<CString> {
     match CString::new(name.as_bytes()) {
         Ok(name) => Ok(name),
         Err(_) => Err(io::Error::new(
@@ -46,17 +45,15 @@ pub unsafe fn allocate_loop<F: FnMut(*mut u8, usize) -> ssize_t>(mut f: F) -> io
         } else if ret == 0 {
             break;
         }
-        vec.reserve_exact(ret as usize);
+        vec.reserve_exact(ret.cast_unsigned());
 
         let ret = (f)(vec.as_mut_ptr(), vec.capacity());
         if ret >= 0 {
-            vec.set_len(ret as usize);
+            vec.set_len(ret.cast_unsigned());
             break;
-        } else {
-            let error = io::Error::last_os_error();
-            if error.raw_os_error() == Some(ERANGE) {
-                continue;
-            }
+        }
+        let error = io::Error::last_os_error();
+        if error.raw_os_error() != Some(ERANGE) {
             return Err(error);
         }
     }

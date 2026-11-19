@@ -41,6 +41,9 @@ pub use error::UnsupportedPlatformError;
 pub use sys::{XAttrs, SUPPORTED_PLATFORM};
 
 /// Get an extended attribute for the specified file.
+///
+/// # Errors
+/// Returns an OS error if the path is invalid or the attribute operation fails.
 pub fn get<N, P>(path: P, name: N) -> io::Result<Option<Vec<u8>>>
 where
     P: AsRef<Path>,
@@ -50,6 +53,9 @@ where
 }
 
 /// Set an extended attribute on the specified file.
+///
+/// # Errors
+/// Returns an OS error if the path is invalid or the attribute operation fails.
 pub fn set<N, P>(path: P, name: N, value: &[u8]) -> io::Result<()>
 where
     P: AsRef<Path>,
@@ -59,6 +65,9 @@ where
 }
 
 /// Remove an extended attribute from the specified file.
+///
+/// # Errors
+/// Returns an OS error if the path is invalid or the attribute operation fails.
 pub fn remove<N, P>(path: P, name: N) -> io::Result<()>
 where
     P: AsRef<Path>,
@@ -71,6 +80,9 @@ where
 ///
 /// Note: this may not list *all* attributes. Speficially, it definitely won't list any trusted
 /// attributes unless you are root and it may not list system attributes.
+///
+/// # Errors
+/// Returns an OS error if the path is invalid or the attribute operation fails.
 pub fn list<P>(path: P) -> io::Result<XAttrs>
 where
     P: AsRef<Path>,
@@ -81,6 +93,9 @@ where
 /// Extension trait to manipulate extended attributes on `File`-like objects.
 pub trait FileExt: AsRawFd {
     /// Get an extended attribute for the specified file.
+    ///
+    /// # Errors
+    /// Returns an OS error if the file descriptor is invalid or the attribute operation fails.
     fn get_xattr<N>(&self, name: N) -> io::Result<Option<Vec<u8>>>
     where
         N: AsRef<OsStr>,
@@ -89,6 +104,9 @@ pub trait FileExt: AsRawFd {
     }
 
     /// Set an extended attribute on the specified file.
+    ///
+    /// # Errors
+    /// Returns an OS error if the file descriptor is invalid or the attribute operation fails.
     fn set_xattr<N>(&self, name: N, value: &[u8]) -> io::Result<()>
     where
         N: AsRef<OsStr>,
@@ -97,6 +115,9 @@ pub trait FileExt: AsRawFd {
     }
 
     /// Remove an extended attribute from the specified file.
+    ///
+    /// # Errors
+    /// Returns an OS error if the file descriptor is invalid or the attribute operation fails.
     fn remove_xattr<N>(&self, name: N) -> io::Result<()>
     where
         N: AsRef<OsStr>,
@@ -108,6 +129,9 @@ pub trait FileExt: AsRawFd {
     ///
     /// Note: this may not list *all* attributes. Speficially, it definitely won't list any trusted
     /// attributes unless you are root and it may not list system attributes.
+    ///
+    /// # Errors
+    /// Returns an OS error if the file descriptor is invalid or the attribute operation fails.
     fn list_xattr(&self) -> io::Result<XAttrs> {
         sys::list_fd(self.as_raw_fd())
     }

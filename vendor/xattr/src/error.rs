@@ -13,7 +13,7 @@ use std::fmt;
 pub struct UnsupportedPlatformError;
 
 impl Error for UnsupportedPlatformError {
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "unsupported platform"
     }
 }

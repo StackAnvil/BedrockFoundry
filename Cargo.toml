@@ -10,7 +10,7 @@ publish = false
 
 [features]
 default = ["desktop"]
-desktop = ["dep:gpui", "dep:gpui-component"]
+desktop = ["dep:gpui", "dep:gpui-component", "dep:open"]
 
 [dependencies]
 anyhow = "1"
@@ -24,7 +24,7 @@ fs2 = "0.4"
 gpui = { version = "=0.2.2", optional = true }
 gpui-component = { version = "=0.5.1", optional = true }
 keyring = { version = "3.6", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust", "vendored"] }
-open = "5"
+open = { version = "5", optional = true }
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "stream"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -54,3 +54,23 @@ lto = "thin"
 # the Linux ENOATTR alias removed by current libc releases.
 [patch.crates-io]
 xattr = { path = "vendor/xattr" }
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
+dbg_macro = "warn"
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+map_err_ignore = "warn"
+unused_result_ok = "warn"
+redundant_clone = "warn"
+
+# Public library items are internal APIs shared by the CLI and desktop.
+missing_errors_doc = "allow"
+# Keep RGB and RGBA literals in the same form as hex color codes.
+unreadable_literal = "allow"
