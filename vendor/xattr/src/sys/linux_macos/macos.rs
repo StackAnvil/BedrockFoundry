@@ -3,7 +3,7 @@ use libc::{c_char, c_int, c_void, size_t, ssize_t};
 const XATTR_NOFOLLOW: c_int = 0x0001;
 
 #[inline(always)]
-pub unsafe fn fremovexattr(fd: c_int, name: *const c_char) -> c_int {
+pub(super) unsafe fn fremovexattr(fd: c_int, name: *const c_char) -> c_int {
     extern "C" {
         fn fremovexattr(fd: c_int, name: *const c_char, options: c_int) -> c_int;
     }
@@ -12,7 +12,7 @@ pub unsafe fn fremovexattr(fd: c_int, name: *const c_char) -> c_int {
 }
 
 #[inline(always)]
-pub unsafe fn fsetxattr(
+pub(super) unsafe fn fsetxattr(
     fd: c_int,
     name: *const c_char,
     value: *const c_void,
@@ -33,7 +33,7 @@ pub unsafe fn fsetxattr(
 }
 
 #[inline(always)]
-pub unsafe fn fgetxattr(
+pub(super) unsafe fn fgetxattr(
     fd: c_int,
     name: *const c_char,
     value: *mut c_void,
@@ -54,7 +54,7 @@ pub unsafe fn fgetxattr(
 }
 
 #[inline(always)]
-pub unsafe fn flistxattr(fd: c_int, buf: *mut c_char, size: size_t) -> ssize_t {
+pub(super) unsafe fn flistxattr(fd: c_int, buf: *mut c_char, size: size_t) -> ssize_t {
     extern "C" {
         fn flistxattr(fd: c_int, buf: *mut c_char, size: size_t, options: c_int) -> ssize_t;
     }
@@ -63,7 +63,7 @@ pub unsafe fn flistxattr(fd: c_int, buf: *mut c_char, size: size_t) -> ssize_t {
 }
 
 #[inline(always)]
-pub unsafe fn lremovexattr(path: *const c_char, name: *const c_char) -> c_int {
+pub(super) unsafe fn lremovexattr(path: *const c_char, name: *const c_char) -> c_int {
     extern "C" {
         fn removexattr(path: *const c_char, name: *const c_char, options: c_int) -> c_int;
     }
@@ -72,7 +72,7 @@ pub unsafe fn lremovexattr(path: *const c_char, name: *const c_char) -> c_int {
 }
 
 #[inline(always)]
-pub unsafe fn lsetxattr(
+pub(super) unsafe fn lsetxattr(
     path: *const c_char,
     name: *const c_char,
     value: *const c_void,
@@ -93,7 +93,7 @@ pub unsafe fn lsetxattr(
 }
 
 #[inline(always)]
-pub unsafe fn lgetxattr(
+pub(super) unsafe fn lgetxattr(
     path: *const c_char,
     name: *const c_char,
     value: *mut c_void,
@@ -114,7 +114,7 @@ pub unsafe fn lgetxattr(
 }
 
 #[inline(always)]
-pub unsafe fn llistxattr(path: *const c_char, buf: *mut c_char, size: size_t) -> ssize_t {
+pub(super) unsafe fn llistxattr(path: *const c_char, buf: *mut c_char, size: size_t) -> ssize_t {
     extern "C" {
         fn listxattr(
             path: *const c_char,

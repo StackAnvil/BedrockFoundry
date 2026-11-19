@@ -11,10 +11,10 @@ macro_rules! platforms {
             // Linux names a missing extended attribute ENODATA. New libc releases
             // no longer provide the historical ENOATTR alias.
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            pub const ENOATTR: ::libc::c_int = ::libc::ENODATA;
+            pub(crate) const ENOATTR: ::libc::c_int = ::libc::ENODATA;
             #[cfg(any($(target_os = $platform),*))]
             #[cfg(not(any(target_os = "linux", target_os = "android")))]
-            pub const ENOATTR: ::libc::c_int = ::libc::ENOATTR;
+            pub(crate) const ENOATTR: ::libc::c_int = ::libc::ENOATTR;
         )*
 
         #[cfg(all(feature = "unsupported", not(any($($(target_os = $platform),*),*))))]
@@ -23,7 +23,7 @@ macro_rules! platforms {
         #[cfg(all(feature = "unsupported", not(any($($(target_os = $platform),*),*))))]
         pub use self::unsupported::*;
         #[cfg(all(feature = "unsupported", not(any($($(target_os = $platform),*),*))))]
-        pub const ENOATTR: ::libc::c_int = 0;
+        pub(crate) const ENOATTR: ::libc::c_int = 0;
 
 
         /// A constant indicating whether or not the target platform is supported.

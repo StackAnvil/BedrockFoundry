@@ -12,66 +12,42 @@ pub struct XAttrs;
 impl Iterator for XAttrs {
     type Item = OsString;
     fn next(&mut self) -> Option<OsString> {
-        unreachable!("this should never exist")
+        None
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        unreachable!("this should never exist")
+        (0, Some(0))
     }
 }
 
-pub fn get_fd(_: RawFd, _: &OsStr) -> io::Result<Vec<u8>> {
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        UnsupportedPlatformError,
-    ))
+pub(crate) fn get_fd(_: RawFd, _: &OsStr) -> io::Result<Vec<u8>> {
+    Err(io::Error::other(UnsupportedPlatformError))
 }
 
-pub fn set_fd(_: RawFd, _: &OsStr, _: &[u8]) -> io::Result<()> {
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        UnsupportedPlatformError,
-    ))
+pub(crate) fn set_fd(_: RawFd, _: &OsStr, _: &[u8]) -> io::Result<()> {
+    Err(io::Error::other(UnsupportedPlatformError))
 }
 
-pub fn remove_fd(_: RawFd, _: &OsStr) -> io::Result<()> {
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        UnsupportedPlatformError,
-    ))
+pub(crate) fn remove_fd(_: RawFd, _: &OsStr) -> io::Result<()> {
+    Err(io::Error::other(UnsupportedPlatformError))
 }
 
-pub fn list_fd(_: RawFd) -> io::Result<XAttrs> {
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        UnsupportedPlatformError,
-    ))
+pub(crate) fn list_fd(_: RawFd) -> io::Result<XAttrs> {
+    Err(io::Error::other(UnsupportedPlatformError))
 }
 
-pub fn get_path(_: &Path, _: &OsStr) -> io::Result<Vec<u8>> {
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        UnsupportedPlatformError,
-    ))
+pub(crate) fn get_path(_: &Path, _: &OsStr) -> io::Result<Vec<u8>> {
+    Err(io::Error::other(UnsupportedPlatformError))
 }
 
-pub fn set_path(_: &Path, _: &OsStr, _: &[u8]) -> io::Result<()> {
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        UnsupportedPlatformError,
-    ))
+pub(crate) fn set_path(_: &Path, _: &OsStr, _: &[u8]) -> io::Result<()> {
+    Err(io::Error::other(UnsupportedPlatformError))
 }
 
-pub fn remove_path(_: &Path, _: &OsStr) -> io::Result<()> {
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        UnsupportedPlatformError,
-    ))
+pub(crate) fn remove_path(_: &Path, _: &OsStr) -> io::Result<()> {
+    Err(io::Error::other(UnsupportedPlatformError))
 }
 
-pub fn list_path(_: &Path) -> io::Result<XAttrs> {
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        UnsupportedPlatformError,
-    ))
+pub(crate) fn list_path(_: &Path) -> io::Result<XAttrs> {
+    Err(io::Error::other(UnsupportedPlatformError))
 }

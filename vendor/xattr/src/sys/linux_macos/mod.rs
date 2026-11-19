@@ -17,11 +17,12 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::io::RawFd;
 use std::path::Path;
 
-use libc::{c_char, c_void, size_t};
+use libc::{c_char, c_void};
 
 use util::{allocate_loop, name_to_c, path_to_c};
 
 /// An iterator over a set of extended attributes names.
+#[derive(Debug)]
 pub struct XAttrs {
     data: Box<[u8]>,
     offset: usize,
@@ -29,12 +30,12 @@ pub struct XAttrs {
 
 impl Clone for XAttrs {
     fn clone(&self) -> Self {
-        XAttrs {
+        Self {
             data: Vec::from(&*self.data).into_boxed_slice(),
             offset: self.offset,
         }
     }
-    fn clone_from(&mut self, other: &XAttrs) {
+    fn clone_from(&mut self, other: &Self) {
         self.offset = other.offset;
 
         let mut data = mem::replace(&mut self.data, Box::new([])).into_vec();
@@ -64,17 +65,17 @@ impl Iterator for XAttrs {
     }
 }
 
-pub fn get_fd(fd: RawFd, name: &OsStr) -> io::Result<Vec<u8>> {
+pub(crate) fn get_fd(fd: RawFd, name: &OsStr) -> io::Result<Vec<u8>> {
     let name = name_to_c(name)?;
     let read = |buf: *mut u8, len| {
         // SAFETY: allocate_loop supplies a writable buffer of len bytes or a null size probe. The name is a live C string.
-        unsafe { fgetxattr(fd, name.as_ptr(), buf.cast::<c_void>(), len as size_t) }
+        unsafe { fgetxattr(fd, name.as_ptr(), buf.cast::<c_void>(), len) }
     };
     // SAFETY: On buffered success, the OS initializes exactly the returned byte count.
     unsafe { allocate_loop(read) }
 }
 
-pub fn set_fd(fd: RawFd, name: &OsStr, value: &[u8]) -> io::Result<()> {
+pub(crate) fn set_fd(fd: RawFd, name: &OsStr, value: &[u8]) -> io::Result<()> {
     let name = name_to_c(name)?;
     // SAFETY: The name is a live C string. The value slice is readable for its stated length.
     let ret = unsafe {
@@ -82,7 +83,7 @@ pub fn set_fd(fd: RawFd, name: &OsStr, value: &[u8]) -> io::Result<()> {
             fd,
             name.as_ptr(),
             value.as_ptr().cast::<c_void>(),
-            value.len() as size_t,
+            value.len(),
         )
     };
     if ret != 0 {
@@ -92,7 +93,7 @@ pub fn set_fd(fd: RawFd, name: &OsStr, value: &[u8]) -> io::Result<()> {
     }
 }
 
-pub fn remove_fd(fd: RawFd, name: &OsStr) -> io::Result<()> {
+pub(crate) fn remove_fd(fd: RawFd, name: &OsStr) -> io::Result<()> {
     let name = name_to_c(name)?;
     // SAFETY: The name is a live C string.
     let ret = unsafe { fremovexattr(fd, name.as_ptr()) };
@@ -103,10 +104,10 @@ pub fn remove_fd(fd: RawFd, name: &OsStr) -> io::Result<()> {
     }
 }
 
-pub fn list_fd(fd: RawFd) -> io::Result<XAttrs> {
+pub(crate) fn list_fd(fd: RawFd) -> io::Result<XAttrs> {
     let read = |buf: *mut u8, len| {
         // SAFETY: allocate_loop supplies a writable buffer of len bytes or a null size probe.
-        unsafe { flistxattr(fd, buf.cast::<c_char>(), len as size_t) }
+        unsafe { flistxattr(fd, buf.cast::<c_char>(), len) }
     };
     // SAFETY: On buffered success, the OS initializes exactly the returned byte count.
     let vec = unsafe { allocate_loop(read) }?;
@@ -116,7 +117,7 @@ pub fn list_fd(fd: RawFd) -> io::Result<XAttrs> {
     })
 }
 
-pub fn get_path(path: &Path, name: &OsStr) -> io::Result<Vec<u8>> {
+pub(crate) fn get_path(path: &Path, name: &OsStr) -> io::Result<Vec<u8>> {
     let name = name_to_c(name)?;
     let path = path_to_c(path)?;
     let read = |buf: *mut u8, len| {
@@ -125,14 +126,14 @@ pub fn get_path(path: &Path, name: &OsStr) -> io::Result<Vec<u8>> {
                 path.as_ptr(),
                 name.as_ptr(),
                 buf.cast::<c_void>(),
-                len as size_t,
+                len,
             ) }
     };
     // SAFETY: On buffered success, the OS initializes exactly the returned byte count.
     unsafe { allocate_loop(read) }
 }
 
-pub fn set_path(path: &Path, name: &OsStr, value: &[u8]) -> io::Result<()> {
+pub(crate) fn set_path(path: &Path, name: &OsStr, value: &[u8]) -> io::Result<()> {
     let name = name_to_c(name)?;
     let path = path_to_c(path)?;
     // SAFETY: The path and name are live C strings. The value slice is readable for its stated length.
@@ -141,7 +142,7 @@ pub fn set_path(path: &Path, name: &OsStr, value: &[u8]) -> io::Result<()> {
             path.as_ptr(),
             name.as_ptr(),
             value.as_ptr().cast::<c_void>(),
-            value.len() as size_t,
+            value.len(),
         )
     };
     if ret != 0 {
@@ -151,7 +152,7 @@ pub fn set_path(path: &Path, name: &OsStr, value: &[u8]) -> io::Result<()> {
     }
 }
 
-pub fn remove_path(path: &Path, name: &OsStr) -> io::Result<()> {
+pub(crate) fn remove_path(path: &Path, name: &OsStr) -> io::Result<()> {
     let name = name_to_c(name)?;
     let path = path_to_c(path)?;
     // SAFETY: The path and name are live C strings.
@@ -163,11 +164,11 @@ pub fn remove_path(path: &Path, name: &OsStr) -> io::Result<()> {
     }
 }
 
-pub fn list_path(path: &Path) -> io::Result<XAttrs> {
+pub(crate) fn list_path(path: &Path) -> io::Result<XAttrs> {
     let path = path_to_c(path)?;
     let read = |buf: *mut u8, len| {
         // SAFETY: allocate_loop supplies a writable buffer of len bytes or a null size probe. The path is a live C string.
-        unsafe { llistxattr(path.as_ptr(), buf.cast::<c_char>(), len as size_t) }
+        unsafe { llistxattr(path.as_ptr(), buf.cast::<c_char>(), len) }
     };
     // SAFETY: On buffered success, the OS initializes exactly the returned byte count.
     let vec = unsafe { allocate_loop(read) }?;
