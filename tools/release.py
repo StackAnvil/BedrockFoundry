@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Validate release versions and package only explicit public release inputs."""
+
 from __future__ import annotations
 
 import argparse
@@ -8,12 +9,12 @@ import hashlib
 import io
 import json
 import os
-from pathlib import Path
 import re
 import tarfile
 import tempfile
 import tomllib
 import zipfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PLATFORMS = {
@@ -21,19 +22,36 @@ PLATFORMS = {
     "windows-x86_64": ("bedrock-foundry.exe", "x86_64-pc-windows-msvc", ".zip"),
 }
 PUBLIC_FILES = (
-    "LICENSE", "README.md", "THIRD_PARTY_NOTICES.md", "CONTRIBUTING.md", "CHANGELOG.md",
-    "docs/cli.md", "docs/compatibility.md", "docs/development.md", "docs/hosting.md", "docs/releases.md",
-    "docs/media/create-server.mp4", "docs/media/create-server.gif",
-    "docs/media/install-addon.mp4", "docs/media/install-addon.gif",
-    "docs/media/manage-server.mp4", "docs/media/manage-server.gif",
+    "LICENSE",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md",
+    "CONTRIBUTING.md",
+    "CHANGELOG.md",
+    "docs/cli.md",
+    "docs/compatibility.md",
+    "docs/development.md",
+    "docs/hosting.md",
+    "docs/releases.md",
+    "docs/media/create-server.mp4",
+    "docs/media/create-server.gif",
+    "docs/media/install-addon.mp4",
+    "docs/media/install-addon.gif",
+    "docs/media/manage-server.mp4",
+    "docs/media/manage-server.gif",
 )
-VERSION = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?")
+VERSION = re.compile(
+    r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+)
 
 
 def version(root: Path = ROOT) -> str:
-    value = tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8"))["package"]["version"]
+    value = tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8"))["package"][
+        "version"
+    ]
     if not VERSION.fullmatch(value):
-        raise ValueError("Cargo.toml must contain a release version such as 0.1.0 or 0.1.0-rc.1")
+        raise ValueError(
+            "Cargo.toml must contain a release version such as 0.1.0 or 0.1.0-rc.1"
+        )
     return value
 
 
@@ -53,7 +71,13 @@ def notes(root: Path = ROOT) -> str:
         if heading.startswith(f"[{current}] ") or heading == f"[{current}]":
             if not body.strip():
                 raise ValueError(f"CHANGELOG.md has no notes for {current}")
-            return body.strip().replace("](docs/", f"](https://github.com/StackAnvil/BedrockFoundry/blob/v{current}/docs/") + "\n"
+            return (
+                body.strip().replace(
+                    "](docs/",
+                    f"](https://github.com/StackAnvil/BedrockFoundry/blob/v{current}/docs/",
+                )
+                + "\n"
+            )
     raise ValueError(f"CHANGELOG.md has no release section for {current}")
 
 
@@ -74,7 +98,14 @@ def _write(path: Path, data: bytes) -> None:
         pending.unlink(missing_ok=True)
 
 
-def package(platform: str, binary: Path, licenses: Path, output: Path, commit: str, root: Path = ROOT) -> Path:
+def package(
+    platform: str,
+    binary: Path,
+    licenses: Path,
+    output: Path,
+    commit: str,
+    root: Path = ROOT,
+) -> Path:
     executable, target, suffix = PLATFORMS[platform]
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise ValueError("A complete source commit SHA is required")
@@ -87,22 +118,38 @@ def package(platform: str, binary: Path, licenses: Path, output: Path, commit: s
     files = {name: (root / name).read_bytes() for name in PUBLIC_FILES}
     files[executable] = binary.read_bytes()
     files["third-party-licenses.html"] = licenses.read_bytes()
-    files["BUILD.json"] = (json.dumps({
-        "version": current, "target": target, "commit": commit,
-        "binary_sha256": hashlib.sha256(files[executable]).hexdigest(),
-        "repository": "https://github.com/StackAnvil/BedrockFoundry",
-    }, indent=2) + "\n").encode()
+    files["BUILD.json"] = (
+        json.dumps(
+            {
+                "version": current,
+                "target": target,
+                "commit": commit,
+                "binary_sha256": hashlib.sha256(files[executable]).hexdigest(),
+                "repository": "https://github.com/StackAnvil/BedrockFoundry",
+            },
+            indent=2,
+        )
+        + "\n"
+    ).encode()
     content = io.BytesIO()
     if suffix == ".zip":
-        with zipfile.ZipFile(content, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+        with zipfile.ZipFile(
+            content, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9
+        ) as archive:
             for name, data in sorted(files.items()):
-                entry = zipfile.ZipInfo(f"{folder}/{name}", date_time=(1980, 1, 1, 0, 0, 0))
+                entry = zipfile.ZipInfo(
+                    f"{folder}/{name}", date_time=(1980, 1, 1, 0, 0, 0)
+                )
                 entry.create_system = 3
-                entry.external_attr = (0o100755 if name == executable else 0o100644) << 16
+                entry.external_attr = (
+                    0o100755 if name == executable else 0o100644
+                ) << 16
                 entry.compress_type = zipfile.ZIP_DEFLATED
                 archive.writestr(entry, data)
     else:
-        with gzip.GzipFile(fileobj=content, mode="wb", filename="", mtime=0) as compressed:
+        with gzip.GzipFile(
+            fileobj=content, mode="wb", filename="", mtime=0
+        ) as compressed:
             with tarfile.open(fileobj=compressed, mode="w") as archive:
                 for name, data in sorted(files.items()):
                     entry = tarfile.TarInfo(f"{folder}/{name}")
@@ -113,16 +160,26 @@ def package(platform: str, binary: Path, licenses: Path, output: Path, commit: s
     path = output / f"{folder}{suffix}"
     data = content.getvalue()
     _write(path, data)
-    _write(path.with_name(path.name + ".sha256"), f"{hashlib.sha256(data).hexdigest()}  {path.name}\n".encode())
+    _write(
+        path.with_name(path.name + ".sha256"),
+        f"{hashlib.sha256(data).hexdigest()}  {path.name}\n".encode(),
+    )
     return path
 
 
 def checksums(directory: Path, root: Path = ROOT) -> Path:
     current = version(root)
-    expected = {f"bedrock-foundry-{current}-{platform}{suffix}" for platform, (_, _, suffix) in PLATFORMS.items()}
-    found = {p.name for p in directory.iterdir() if p.name.endswith((".zip", ".tar.gz"))}
+    expected = {
+        f"bedrock-foundry-{current}-{platform}{suffix}"
+        for platform, (_, _, suffix) in PLATFORMS.items()
+    }
+    found = {
+        p.name for p in directory.iterdir() if p.name.endswith((".zip", ".tar.gz"))
+    }
     if found != expected:
-        raise ValueError(f"Release archives do not match the complete platform set: {sorted(found)}")
+        raise ValueError(
+            f"Release archives do not match the complete platform set: {sorted(found)}"
+        )
     records = []
     for name in sorted(expected):
         digest = hashlib.sha256((directory / name).read_bytes()).hexdigest()
