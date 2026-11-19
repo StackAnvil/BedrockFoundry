@@ -35,6 +35,9 @@ concurrency:
   cancel-in-progress: true
 env:
   FUZZ_TOOLCHAIN: nightly-2026-11-01
+  # The installed cargo-fuzz binary is a musl build and defaults to its own
+  # target. AddressSanitizer needs the glibc target.
+  FUZZ_TARGET_TRIPLE: x86_64-unknown-linux-gnu
 jobs:
   fuzz:
     name: ${{ matrix.target }}
@@ -70,11 +73,11 @@ jobs:
           key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
           restore-keys: fuzz-corpus-${{ matrix.target }}-
       - name: Build fuzz target
-        run: cargo +"$FUZZ_TOOLCHAIN" fuzz build "$TARGET"
+        run: cargo +"$FUZZ_TOOLCHAIN" fuzz build --target "$FUZZ_TARGET_TRIPLE" "$TARGET"
       - name: Fuzz
         run: |
           mkdir -p "fuzz/corpus/$TARGET"
-          cargo +"$FUZZ_TOOLCHAIN" fuzz run "$TARGET" "fuzz/corpus/$TARGET" "fuzz/seeds/$TARGET" -- \
+          cargo +"$FUZZ_TOOLCHAIN" fuzz run --target "$FUZZ_TARGET_TRIPLE" "$TARGET" "fuzz/corpus/$TARGET" "fuzz/seeds/$TARGET" -- \
             -max_total_time="$SECONDS_PER_TARGET" -rss_limit_mb=2048 -timeout=10
       - name: Save corpus
         if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
