@@ -1,5 +1,6 @@
 //! FreeBSD and NetBSD xattr support.
 
+use std::convert::TryFrom;
 use std::ffi::{CString, OsStr, OsString};
 use std::io;
 use std::mem;
@@ -10,9 +11,9 @@ use std::path::Path;
 use libc::{c_char, c_int, c_void, size_t, ssize_t, EPERM};
 use util::{allocate_loop, path_to_c};
 
-const EXTATTR_NAMESPACE_USER_STRING: &'static str = "user";
-const EXTATTR_NAMESPACE_SYSTEM_STRING: &'static str = "system";
-const EXTATTR_NAMESPACE_NAMES: [&'static str; 3] = [
+const EXTATTR_NAMESPACE_USER_STRING: &str = "user";
+const EXTATTR_NAMESPACE_SYSTEM_STRING: &str = "system";
+const EXTATTR_NAMESPACE_NAMES: [&str; 3] = [
     "empty",
     EXTATTR_NAMESPACE_USER_STRING,
     EXTATTR_NAMESPACE_SYSTEM_STRING,
@@ -90,11 +91,11 @@ impl Clone for XAttrs {
         self.offset = other.offset;
 
         let mut data = mem::replace(&mut self.user_attrs, Box::new([])).into_vec();
-        data.extend(other.user_attrs.iter().cloned());
+        data.extend(other.user_attrs.iter().copied());
         self.user_attrs = data.into_boxed_slice();
 
         data = mem::replace(&mut self.system_attrs, Box::new([])).into_vec();
-        data.extend(other.system_attrs.iter().cloned());
+        data.extend(other.system_attrs.iter().copied());
         self.system_attrs = data.into_boxed_slice();
     }
 }
@@ -121,12 +122,12 @@ impl Iterator for XAttrs {
         self.offset += siz + 1;
         if self.offset < self.system_attrs.len() {
             Some(prefix_namespace(
-                OsStr::from_bytes(&data[1..siz + 1]),
+                OsStr::from_bytes(&data[1..=siz]),
                 EXTATTR_NAMESPACE_SYSTEM,
             ))
         } else {
             Some(prefix_namespace(
-                OsStr::from_bytes(&data[1..siz + 1]),
+                OsStr::from_bytes(&data[1..=siz]),
                 EXTATTR_NAMESPACE_USER,
             ))
         }
@@ -143,45 +144,39 @@ impl Iterator for XAttrs {
 
 fn name_to_ns(name: &OsStr) -> io::Result<(c_int, CString)> {
     let mut groups = name.as_bytes().splitn(2, |&b| b == b'.').take(2);
-    let nsname = match groups.next() {
-        Some(s) => s,
-        None => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "couldn't find namespace",
-            ))
-        }
+    let Some(nsname) = groups.next() else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "couldn't find namespace",
+        ));
     };
 
-    let propname = match groups.next() {
-        Some(s) => s,
-        None => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "couldn't find attribute",
-            ))
-        }
+    let Some(propname) = groups.next() else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "couldn't find attribute",
+        ));
     };
 
-    let ns_int = match EXTATTR_NAMESPACE_NAMES
+    let Some(ns_int) = EXTATTR_NAMESPACE_NAMES
         .iter()
         .position(|&s| s.as_bytes() == nsname)
-    {
-        Some(i) => i,
-        None => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "no matching namespace",
-            ))
-        }
+    else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "no matching namespace",
+        ));
     };
 
-    Ok((ns_int as c_int, CString::new(propname)?))
+    Ok((
+        c_int::try_from(ns_int).map_err(io::Error::other)?,
+        CString::new(propname)?,
+    ))
 }
 
 fn prefix_namespace(attr: &OsStr, ns: c_int) -> OsString {
-    let nsname = EXTATTR_NAMESPACE_NAMES[ns as usize];
-    let mut v = Vec::with_capacity(nsname.as_bytes().len() + attr.as_bytes().len() + 1);
+    let nsname = EXTATTR_NAMESPACE_NAMES[ns.cast_unsigned() as usize];
+    let mut v = Vec::with_capacity(nsname.len() + attr.as_bytes().len() + 1);
     v.extend(nsname.as_bytes());
     v.extend(".".as_bytes());
     v.extend(attr.as_bytes());
@@ -190,21 +185,23 @@ fn prefix_namespace(attr: &OsStr, ns: c_int) -> OsString {
 
 pub fn get_fd(fd: RawFd, name: &OsStr) -> io::Result<Vec<u8>> {
     let (ns, name) = name_to_ns(name)?;
-    unsafe {
-        allocate_loop(|buf, len| {
-            extattr_get_fd(fd, ns, name.as_ptr(), buf as *mut c_void, len as size_t)
-        })
-    }
+    let read = |buf: *mut u8, len| {
+        // SAFETY: allocate_loop supplies a writable buffer of len bytes or a null size probe. The name is a live C string.
+        unsafe { extattr_get_fd(fd, ns, name.as_ptr(), buf.cast::<c_void>(), len as size_t) }
+    };
+    // SAFETY: On buffered success, the OS initializes exactly the returned byte count.
+    unsafe { allocate_loop(read) }
 }
 
 pub fn set_fd(fd: RawFd, name: &OsStr, value: &[u8]) -> io::Result<()> {
     let (ns, name) = name_to_ns(name)?;
+    // SAFETY: The name is a live C string. The value slice is readable for its stated length.
     let ret = unsafe {
         extattr_set_fd(
             fd,
             ns,
             name.as_ptr(),
-            value.as_ptr() as *const c_void,
+            value.as_ptr().cast::<c_void>(),
             value.len() as size_t,
         )
     };
@@ -217,6 +214,7 @@ pub fn set_fd(fd: RawFd, name: &OsStr, value: &[u8]) -> io::Result<()> {
 
 pub fn remove_fd(fd: RawFd, name: &OsStr) -> io::Result<()> {
     let (ns, name) = name_to_ns(name)?;
+    // SAFETY: The name is a live C string.
     let ret = unsafe { extattr_delete_fd(fd, ns, name.as_ptr()) };
     if ret != 0 {
         Err(io::Error::last_os_error())
@@ -226,44 +224,45 @@ pub fn remove_fd(fd: RawFd, name: &OsStr) -> io::Result<()> {
 }
 
 pub fn list_fd(fd: RawFd) -> io::Result<XAttrs> {
-    let sysvec = unsafe {
-        let res = allocate_loop(|buf, len| {
+    let read = |buf: *mut u8, len| {
+        // SAFETY: allocate_loop supplies a writable buffer of len bytes or a null size probe.
+        unsafe {
             extattr_list_fd(
                 fd,
                 EXTATTR_NAMESPACE_SYSTEM,
-                buf as *mut c_void,
+                buf.cast::<c_void>(),
                 len as size_t,
             )
-        });
-        // On FreeBSD, system attributes require root privileges to view. However,
-        // to mimic the behavior of listxattr in linux and osx, we need to query
-        // them anyway and return empty results if we get EPERM
-        match res {
-            Ok(v) => v,
-            Err(err) => {
-                if err.raw_os_error() == Some(EPERM) {
-                    Vec::new()
-                } else {
-                    return Err(err);
-                }
+        }
+    };
+    // SAFETY: On buffered success, the OS initializes exactly the returned byte count.
+    let res = unsafe { allocate_loop(read) };
+    // FreeBSD requires root to list system attributes. Treat EPERM as an empty
+    // system namespace so callers can still list user attributes.
+    let sysvec = match res {
+        Ok(v) => v,
+        Err(err) => {
+            if err.raw_os_error() == Some(EPERM) {
+                Vec::new()
+            } else {
+                return Err(err);
             }
         }
     };
 
-    let uservec = unsafe {
-        let res = allocate_loop(|buf, len| {
+    let read = |buf: *mut u8, len| {
+        // SAFETY: allocate_loop supplies a writable buffer of len bytes or a null size probe.
+        unsafe {
             extattr_list_fd(
                 fd,
                 EXTATTR_NAMESPACE_USER,
-                buf as *mut c_void,
+                buf.cast::<c_void>(),
                 len as size_t,
             )
-        });
-        match res {
-            Ok(v) => v,
-            Err(err) => return Err(err),
         }
     };
+    // SAFETY: On buffered success, the OS initializes exactly the returned byte count.
+    let uservec = unsafe { allocate_loop(read) }?;
 
     Ok(XAttrs {
         system_attrs: sysvec.into_boxed_slice(),
@@ -275,28 +274,32 @@ pub fn list_fd(fd: RawFd) -> io::Result<XAttrs> {
 pub fn get_path(path: &Path, name: &OsStr) -> io::Result<Vec<u8>> {
     let (ns, name) = name_to_ns(name)?;
     let path = path_to_c(path)?;
-    unsafe {
-        allocate_loop(|buf, len| {
+    let read = |buf: *mut u8, len| {
+        // SAFETY: allocate_loop supplies a writable buffer of len bytes or a null size probe. The path and name are live C strings.
+        unsafe {
             extattr_get_link(
                 path.as_ptr(),
                 ns,
                 name.as_ptr(),
-                buf as *mut c_void,
+                buf.cast::<c_void>(),
                 len as size_t,
             )
-        })
-    }
+        }
+    };
+    // SAFETY: On buffered success, the OS initializes exactly the returned byte count.
+    unsafe { allocate_loop(read) }
 }
 
 pub fn set_path(path: &Path, name: &OsStr, value: &[u8]) -> io::Result<()> {
     let (ns, name) = name_to_ns(name)?;
     let path = path_to_c(path)?;
+    // SAFETY: The path and name are live C strings. The value slice is readable for its stated length.
     let ret = unsafe {
         extattr_set_link(
             path.as_ptr(),
             ns,
             name.as_ptr(),
-            value.as_ptr() as *const c_void,
+            value.as_ptr().cast::<c_void>(),
             value.len() as size_t,
         )
     };
@@ -310,6 +313,7 @@ pub fn set_path(path: &Path, name: &OsStr, value: &[u8]) -> io::Result<()> {
 pub fn remove_path(path: &Path, name: &OsStr) -> io::Result<()> {
     let (ns, name) = name_to_ns(name)?;
     let path = path_to_c(path)?;
+    // SAFETY: The path and name are live C strings.
     let ret = unsafe { extattr_delete_link(path.as_ptr(), ns, name.as_ptr()) };
     if ret != 0 {
         Err(io::Error::last_os_error())
@@ -320,44 +324,45 @@ pub fn remove_path(path: &Path, name: &OsStr) -> io::Result<()> {
 
 pub fn list_path(path: &Path) -> io::Result<XAttrs> {
     let path = path_to_c(path)?;
-    let sysvec = unsafe {
-        let res = allocate_loop(|buf, len| {
+    let read = |buf: *mut u8, len| {
+        // SAFETY: allocate_loop supplies a writable buffer of len bytes or a null size probe. The path is a live C string.
+        unsafe {
             extattr_list_link(
                 path.as_ptr(),
                 EXTATTR_NAMESPACE_SYSTEM,
-                buf as *mut c_void,
+                buf.cast::<c_void>(),
                 len as size_t,
             )
-        });
-        // On FreeBSD, system attributes require root privileges to view. However,
-        // to mimic the behavior of listxattr in linux and osx, we need to query
-        // them anyway and return empty results if we get EPERM
-        match res {
-            Ok(v) => v,
-            Err(err) => {
-                if err.raw_os_error() == Some(EPERM) {
-                    Vec::new()
-                } else {
-                    return Err(err);
-                }
+        }
+    };
+    // SAFETY: On buffered success, the OS initializes exactly the returned byte count.
+    let res = unsafe { allocate_loop(read) };
+    // FreeBSD requires root to list system attributes. Treat EPERM as an empty
+    // system namespace so callers can still list user attributes.
+    let sysvec = match res {
+        Ok(v) => v,
+        Err(err) => {
+            if err.raw_os_error() == Some(EPERM) {
+                Vec::new()
+            } else {
+                return Err(err);
             }
         }
     };
 
-    let uservec = unsafe {
-        let res = allocate_loop(|buf, len| {
+    let read = |buf: *mut u8, len| {
+        // SAFETY: allocate_loop supplies a writable buffer of len bytes or a null size probe. The path is a live C string.
+        unsafe {
             extattr_list_link(
                 path.as_ptr(),
                 EXTATTR_NAMESPACE_USER,
-                buf as *mut c_void,
+                buf.cast::<c_void>(),
                 len as size_t,
             )
-        });
-        match res {
-            Ok(v) => v,
-            Err(err) => return Err(err),
         }
     };
+    // SAFETY: On buffered success, the OS initializes exactly the returned byte count.
+    let uservec = unsafe { allocate_loop(read) }?;
 
     Ok(XAttrs {
         system_attrs: sysvec.into_boxed_slice(),

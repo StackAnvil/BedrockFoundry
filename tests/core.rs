@@ -105,7 +105,8 @@ fn rejects_archive_paths_that_escape_or_alias_a_destination() {
     ] {
         assert!(safe_relative(path).is_err(), "accepted {path}");
     }
-    assert!(archive::read_zip(&archive(vec![("../secret", vec![1])])).is_err());
+    archive::read_zip(&archive(vec![("../secret", vec![1])]))
+        .expect_err("ZIP accepted a parent directory member");
 }
 #[test]
 fn rejects_duplicate_archive_payloads() {
@@ -120,7 +121,7 @@ fn rejects_duplicate_archive_payloads() {
     for offset in offsets {
         bytes[offset..offset + 4].copy_from_slice(b"same");
     }
-    assert!(archive::read_zip(&bytes).is_err());
+    archive::read_zip(&bytes).expect_err("ZIP accepted duplicate members");
 }
 
 #[test]
@@ -163,9 +164,8 @@ fn refuses_credentials_and_arbitrary_hosts_in_catalog_downloads() {
             "accepted {url}"
         );
     }
-    assert!(
-        marketplace::validate_asset_url("https://xforgeassets001.xboxlive.com/asset.zip").is_ok()
-    );
+    marketplace::validate_asset_url("https://xforgeassets001.xboxlive.com/asset.zip")
+        .expect("Catalog rejected the allowed asset URL");
 }
 #[test]
 fn preserves_custom_server_properties_and_prevents_line_injection() {
@@ -178,7 +178,9 @@ fn preserves_custom_server_properties_and_prevents_line_injection() {
     assert!(properties.contains("online-mode=true\n"));
     assert!(properties.contains("transport=nethernet\n"));
     config.name = "Injected\nonline-mode=false".into();
-    assert!(config.properties("").is_err());
+    config
+        .properties("")
+        .expect_err("Configuration accepted a server name containing a newline");
 }
 #[test]
 fn installs_both_pack_types_with_matching_world_activation_and_keeps_world_data() {
@@ -301,7 +303,8 @@ fn backup_includes_world_settings_and_addon_files() {
         .read_to_end(&mut bytes)
         .unwrap();
     assert_eq!(bytes, b"world-state");
-    assert!(zip.by_name("foundry.json").is_ok());
+    zip.by_name("foundry.json")
+        .expect("Backup omitted foundry.json");
 }
 #[test]
 fn another_process_cannot_open_the_same_application_store() {
@@ -309,7 +312,7 @@ fn another_process_cannot_open_the_same_application_store() {
     let first = Store::open(Some(temp.path().to_path_buf())).unwrap();
     assert!(Store::open(Some(temp.path().to_path_buf())).is_err());
     drop(first);
-    assert!(Store::open(Some(temp.path().to_path_buf())).is_ok());
+    Store::open(Some(temp.path().to_path_buf())).expect("Store lease did not release on drop");
 }
 
 #[test]

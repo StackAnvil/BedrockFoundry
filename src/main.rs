@@ -131,14 +131,20 @@ enum ServerCommand {
         id: Uuid,
     },
 }
-fn main() {
+fn main() -> std::process::ExitCode {
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "An existing global subscriber can continue to handle logging"
+    )]
     let _ = tracing_subscriber::fmt()
         .with_env_filter("warn,gpui=info")
         .with_ansi(false)
         .try_init();
     if let Err(error) = run() {
         eprintln!("{error:#}");
-        std::process::exit(1);
+        std::process::ExitCode::FAILURE
+    } else {
+        std::process::ExitCode::SUCCESS
     }
 }
 fn run() -> Result<()> {

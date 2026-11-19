@@ -36,6 +36,8 @@ pub fn extract_noattr(result: io::Result<Vec<u8>>) -> io::Result<Option<Vec<u8>>
     })
 }
 
+// The callback must initialize the returned byte count on buffered success,
+// and that count must be within the supplied capacity. A null buffer probes the size.
 pub unsafe fn allocate_loop<F: FnMut(*mut u8, usize) -> ssize_t>(mut f: F) -> io::Result<Vec<u8>> {
     let mut vec: Vec<u8> = Vec::new();
     loop {
@@ -49,7 +51,8 @@ pub unsafe fn allocate_loop<F: FnMut(*mut u8, usize) -> ssize_t>(mut f: F) -> io
 
         let ret = (f)(vec.as_mut_ptr(), vec.capacity());
         if ret >= 0 {
-            vec.set_len(ret.cast_unsigned());
+            // SAFETY: The callback initialized this many bytes within the capacity.
+            unsafe { vec.set_len(ret.cast_unsigned()) };
             break;
         }
         let error = io::Error::last_os_error();

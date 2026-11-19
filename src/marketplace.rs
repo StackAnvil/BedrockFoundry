@@ -326,7 +326,8 @@ pub fn parse_addon<S: std::hash::BuildHasher>(
 pub async fn list(services: &mut Minecraft, http: &Client) -> Result<Vec<Addon>> {
     let keys = inventory(services, http).await?;
     let owned: HashSet<_> = keys.keys().copied().collect();
-    let ids: Vec<_> = owned.iter().collect();
+    let mut ids: Vec<_> = owned.iter().collect();
+    ids.sort_unstable();
     let mut items = BTreeMap::new();
     for chunk in ids.chunks(6) {
         let filter = chunk

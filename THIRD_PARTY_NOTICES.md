@@ -30,6 +30,8 @@ xattr API required by GPUI 0.2.2's tar dependency.
 
 Foundry also applies its Clippy checks to this copy. The attribute iterator
 stops if the operating system returns a name without a null terminator.
+Each unsafe block documents the conditions its operation requires. Calls to the
+operating system and the buffer allocator use separate unsafe blocks.
 
 ## Minecraft content
 

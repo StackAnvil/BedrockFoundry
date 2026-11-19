@@ -176,6 +176,10 @@ impl Worker {
             let runtime = match tokio::runtime::Runtime::new() {
                 Ok(runtime) => runtime,
                 Err(error) => {
+                    #[expect(
+                        clippy::let_underscore_must_use,
+                        reason = "The receiver can disconnect during shutdown"
+                    )]
                     let _ = events.send(Event::Fatal(error.to_string()));
                     return;
                 }
@@ -183,10 +187,18 @@ impl Worker {
             let mut backend = match Backend::open(root) {
                 Ok(backend) => backend,
                 Err(error) => {
+                    #[expect(
+                        clippy::let_underscore_must_use,
+                        reason = "The receiver can disconnect during shutdown"
+                    )]
                     let _ = events.send(Event::Fatal(format!("{error:#}")));
                     return;
                 }
             };
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "The receiver can disconnect during shutdown"
+            )]
             let _ = events.send(Event::Processes(backend.processes.clone()));
             let mut session = Session::default();
             let mut last_warning = None;
@@ -205,6 +217,10 @@ impl Worker {
                         &events,
                         &cancellation,
                     ));
+                    #[expect(
+                        clippy::let_underscore_must_use,
+                        reason = "The receiver can disconnect during shutdown"
+                    )]
                     let _ = events.send(Event::Done(
                         op,
                         result.map_err(|error| Failure {
@@ -218,11 +234,19 @@ impl Worker {
                 match snapshot(&backend, &session) {
                     Ok(snapshot) => {
                         last_warning = None;
+                        #[expect(
+                            clippy::let_underscore_must_use,
+                            reason = "The receiver can disconnect during shutdown"
+                        )]
                         let _ = events.send(Event::Snapshot(Box::new(snapshot)));
                     }
                     Err(error) => {
                         let message = format!("{error:#}");
                         if last_warning.as_ref() != Some(&message) {
+                            #[expect(
+                                clippy::let_underscore_must_use,
+                                reason = "The receiver can disconnect during shutdown"
+                            )]
                             let _ = events.send(Event::Warning(message.clone()));
                             last_warning = Some(message);
                         }
@@ -243,6 +267,10 @@ impl Worker {
 impl Drop for Worker {
     fn drop(&mut self) {
         self.cancel.store(true, Ordering::Relaxed);
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "The receiver can disconnect during shutdown"
+        )]
         let _ = self.tx.send(Request::Quit);
         if let Some(processes) = &self.processes {
             processes.stop_all();
@@ -281,6 +309,10 @@ async fn run(
                 .accounts
                 .sign_in(
                     |url, code| {
+                        #[expect(
+                            clippy::let_underscore_must_use,
+                            reason = "The receiver can disconnect during shutdown"
+                        )]
                         let _ = events.send(Event::DeviceCode(url, code));
                     },
                     cancellation,
@@ -306,7 +338,9 @@ async fn run(
         Request::Browse(query) => {
             backend.search_catalog(query).await?;
             // A missing balance is shown as unknown; the listings still load.
-            let _ = backend.refresh_balance().await;
+            if backend.refresh_balance().await.is_err() {
+                eprintln!("Could not refresh the Marketplace balance");
+            }
             Outcome::Quiet
         }
         Request::Balance => {
@@ -391,7 +425,7 @@ fn snapshot(backend: &Backend, session: &Session) -> Result<Snapshot> {
         .values()
         .map(|cached| cached.addon.clone())
         .collect();
-    downloaded.sort_by_key(|addon| addon.name.to_lowercase());
+    downloaded.sort_by_key(|addon| (addon.name.to_lowercase(), addon.id));
     Ok(Snapshot {
         servers,
         library: backend.library.clone(),

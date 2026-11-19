@@ -46,6 +46,10 @@ impl Thumbs {
                     runtime.spawn(async move {
                         let _permit = limit.acquire_owned().await;
                         let image = fetch(&http, &url).await;
+                        #[expect(
+                            clippy::let_underscore_must_use,
+                            reason = "The receiver can disconnect during shutdown"
+                        )]
                         let _ = results.send((url, image));
                     });
                 }

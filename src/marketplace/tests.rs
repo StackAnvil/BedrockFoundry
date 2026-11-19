@@ -54,7 +54,8 @@ fn catalog_keeps_worlds_viewable_without_classifying_their_behavior_packs_as_add
         ..Default::default()
     };
     assert!(CatalogItem::parse(&world, &pack_owner).unwrap().owned);
-    assert!(PurchaseQuote::new(parsed, 1000, "a".repeat(64), 100).is_err());
+    PurchaseQuote::new(parsed, 1000, "a".repeat(64), 100)
+        .expect_err("World listing allowed an add-on purchase quote");
     let mut persona = listing();
     persona["Tags"] = json!([]);
     persona["DisplayProperties"]["packIdentity"] = json!([]);
@@ -101,14 +102,12 @@ fn catalog_pages_use_service_offsets_and_keep_search_text_out_of_filters() {
     )
     .unwrap();
     assert!(end.next_skip.is_none());
-    assert!(
-        CatalogPage::parse(
-            &json!({"data":{"Items":[]}}),
-            CatalogQuery::default(),
-            &Ownership::default()
-        )
-        .is_err()
-    );
+    CatalogPage::parse(
+        &json!({"data":{"Items":[]}}),
+        CatalogQuery::default(),
+        &Ownership::default(),
+    )
+    .expect_err("Catalog accepted a page without a total count");
 }
 
 #[test]
@@ -180,15 +179,13 @@ fn minecoin_prices_and_balances_reject_other_currencies_and_ambiguous_amounts() 
             .is_none()
     );
     for value in [json!(-1), json!(1.5), json!("490"), Value::Null] {
-        assert!(
-            parse_balance(
-                &json!({"result":{"virtualCurrencyBalances":[{"type":"Minecoin","amount":value}]}})
-            )
-            .is_err()
-        );
+        parse_balance(
+            &json!({"result":{"virtualCurrencyBalances":[{"type":"Minecoin","amount":value}]}}),
+        )
+        .expect_err("Balance accepted an invalid Minecoin amount");
     }
     assert_eq!(parse_balance(&json!({"result":{"virtualCurrencyBalances":[{"type":"Minecoin","amount":0},{"type":"Other","amount":10}]}})).unwrap(),0);
-    assert!(parse_balance(&json!({"result":{"virtualCurrencyBalances":[{"type":"Minecoin","amount":1},{"type":"Minecoin","amount":2}]}})).is_err());
+    parse_balance(&json!({"result":{"virtualCurrencyBalances":[{"type":"Minecoin","amount":1},{"type":"Minecoin","amount":2}]}})).expect_err("Balance accepted duplicate Minecoin entries");
 }
 
 #[test]
@@ -206,7 +203,8 @@ fn an_unconfirmed_purchase_blocks_the_same_account_and_offer_after_restart() {
             .correlation,
         first.correlation
     );
-    assert!(PurchaseAttempt::reserve(&reopened, &q).is_err());
+    PurchaseAttempt::reserve(&reopened, &q)
+        .expect_err("Duplicate attempt bypassed the persisted reservation");
     let other = PurchaseQuote::new(item(), 1000, "b".repeat(64), 100).unwrap();
     PurchaseAttempt::reserve(&reopened, &other).unwrap();
     PurchaseAttempt::clear(&reopened, &q.account, q.item.id).unwrap();

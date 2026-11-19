@@ -104,7 +104,9 @@ impl Backend {
             marketplace::submit_purchase(services, &self.http, &quote, attempt.correlation).await;
         // An authorization checkpoint failure must not turn an accepted charge
         // into an apparent rejection. The durable journal still blocks repeats.
-        let _ = self.accounts.persist();
+        if self.accounts.persist().is_err() {
+            eprintln!("Could not save the account checkpoint after the purchase request");
+        }
         if let Err(error) = result {
             if matches!(
                 error,
@@ -115,10 +117,14 @@ impl Backend {
             return Err(error.into());
         }
         attempt.accepted = true;
-        let _ = attempt.save(&self.store, &quote);
+        if attempt.save(&self.store, &quote).is_err() {
+            eprintln!("Could not save the accepted purchase status");
+        }
         let ready = self.refresh_library().await.is_ok()
             && self.library.iter().any(|addon| addon.id == quote.item.id);
-        let _ = self.refresh_balance().await;
+        if self.refresh_balance().await.is_err() {
+            eprintln!("Could not refresh the balance after the purchase");
+        }
         Ok(ready)
     }
     pub(super) async fn reconcile_owned_purchases(&mut self) -> Result<()> {

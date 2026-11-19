@@ -566,6 +566,10 @@ impl Managed {
         if self.child.try_wait()?.is_some() {
             return Ok(());
         }
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "The process can close stdin during shutdown and the wait and kill fallback still runs"
+        )]
         let _ = self.command("stop");
         let deadline = Instant::now() + Duration::from_secs(10);
         while Instant::now() < deadline {
@@ -581,19 +585,21 @@ impl Managed {
 }
 impl Drop for Managed {
     fn drop(&mut self) {
-        let _ = self.stop();
+        if let Err(error) = self.stop() {
+            eprintln!("Could not stop the server during cleanup: {error}");
+        }
     }
 }
 #[derive(Default, Clone)]
 pub struct Processes {
-    entries: Arc<Mutex<HashMap<Uuid, Managed>>>,
+    entries: Arc<Mutex<BTreeMap<Uuid, Managed>>>,
 }
 impl Processes {
     pub fn running(&self, id: Uuid) -> Result<bool> {
         Ok(self.entries()?.get_mut(&id).is_some_and(Managed::running))
     }
 
-    fn entries(&self) -> Result<std::sync::MutexGuard<'_, HashMap<Uuid, Managed>>> {
+    fn entries(&self) -> Result<std::sync::MutexGuard<'_, BTreeMap<Uuid, Managed>>> {
         self.entries
             .lock()
             .map_err(|error| anyhow::anyhow!("{error}"))
@@ -653,6 +659,7 @@ impl Processes {
                 lines,
             },
         );
+        drop(entries);
         Ok(())
     }
     pub fn stop(&self, id: Uuid) -> Result<()> {
@@ -664,7 +671,9 @@ impl Processes {
     pub fn stop_all(&self) {
         if let Ok(mut entries) = self.entries.lock() {
             for process in entries.values_mut() {
-                let _ = process.stop();
+                if let Err(error) = process.stop() {
+                    eprintln!("Could not stop a managed server during shutdown: {error}");
+                }
             }
         }
     }
@@ -673,7 +682,9 @@ impl Processes {
         let message = "Start the server before sending a command";
         let process = entries.get_mut(&id).context(message)?;
         ensure!(process.running(), "{message}");
-        process.command(text)
+        let result = process.command(text);
+        drop(entries);
+        result
     }
     #[must_use]
     pub fn logs(&self, id: Uuid) -> Vec<String> {
@@ -702,7 +713,11 @@ fn capture(
             }
             let text = String::from_utf8_lossy(&line).trim_end().to_string();
             if let Ok(mut file) = file.lock() {
-                let _ = writeln!(file, "{text}");
+                let result = writeln!(file, "{text}");
+                drop(file);
+                if let Err(error) = result {
+                    eprintln!("Could not write the server console log: {error}");
+                }
             }
             if let Ok(mut lines) = lines.lock() {
                 lines.push_back(text);

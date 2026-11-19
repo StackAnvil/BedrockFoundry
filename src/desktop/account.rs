@@ -75,7 +75,9 @@ impl Foundry {
                                 .primary()
                                 .label("Open sign-in page")
                                 .on_click(move |_, _, _| {
-                                    let _ = open::that(&link);
+                                    if open::that(&link).is_err() {
+ eprintln!("Could not open the sign-in link");
+ }
                                 }),
                         )
                         .child(

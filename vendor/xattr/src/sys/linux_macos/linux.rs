@@ -30,7 +30,8 @@ pub unsafe fn fsetxattr(
             flags: c_int,
         ) -> ssize_t;
     }
-    fsetxattr(fd, name, value, size, 0)
+    // SAFETY: The caller supplies a live C string for the name and a readable buffer of size bytes.
+    unsafe { fsetxattr(fd, name, value, size, 0) }
 }
 
 pub unsafe fn lsetxattr(
@@ -48,5 +49,6 @@ pub unsafe fn lsetxattr(
             flags: c_int,
         ) -> ssize_t;
     }
-    lsetxattr(path, name, value, size, 0)
+    // SAFETY: The caller supplies live C strings for the path and name and a readable buffer of size bytes.
+    unsafe { lsetxattr(path, name, value, size, 0) }
 }

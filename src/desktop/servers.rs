@@ -247,7 +247,9 @@ impl Foundry {
                     .on_click({
                         let folder = self.data.root.join("servers").join(id.to_string());
                         move |_, _, _| {
-                            let _ = open::that(&folder);
+                            if let Err(error) = open::that(&folder) {
+                                eprintln!("Could not open the server folder: {error}");
+                            }
                         }
                     }),
             );
@@ -410,6 +412,10 @@ impl Foundry {
                                 });
                                 cx.spawn(async move |this, cx| {
                                     let selected = picker.await;
+                                    #[expect(
+                                        clippy::let_underscore_must_use,
+                                        reason = "The view can close while the file picker is open"
+                                    )]
                                     let _ = this.update(cx, |this, cx| match selected {
                                         Ok(Ok(Some(paths))) => {
                                             if let Some(path) = paths.into_iter().next() {
@@ -878,7 +884,9 @@ impl Foundry {
                             .label("Open backups folder")
                             .disabled(!backups.is_dir())
                             .on_click(move |_, _, _| {
-                                let _ = open::that(&backups);
+                                if let Err(error) = open::that(&backups) {
+ eprintln!("Could not open the backup folder: {error}");
+ }
                             }),
                     ),
             )
