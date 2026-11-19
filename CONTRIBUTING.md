@@ -17,6 +17,11 @@ Include a screenshot for a visible change. State what remains unverified.
 
 ## Run checks
 
+Install Lefthook and run `lefthook install` from the repository root.
+Install Ruff and add `ruff` to your PATH before committing Python changes.
+CI uses Ruff 0.16.0. If `actionlint` is on your PATH, the pre-push hook
+validates workflow changes locally. Otherwise, CI runs that check.
+
 ```sh
 cargo fmt --all --check
 cargo clippy --locked --all-targets -- -D warnings

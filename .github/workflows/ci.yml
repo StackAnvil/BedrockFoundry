@@ -32,6 +32,15 @@ jobs:
         run: rustup show
       - name: Format
         run: cargo fmt --all --check
+      - name: Format vendored xattr
+        run: cargo fmt --manifest-path vendor/xattr/Cargo.toml --check
+      - name: Lint Python
+        uses: astral-sh/ruff-action@4919ec5cf1f49eff0871dbcea0da843445b837e6 # v3.6.1
+        with:
+          version: '0.16.0'
+          args: check
+      - name: Check Python formatting
+        run: ruff format --check
       - name: Validate workflows
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color
       - name: Test release packaging
