@@ -18,6 +18,8 @@ Include a screenshot for a visible change. State what remains unverified.
 ## Run checks
 
 Install Lefthook and run `lefthook install` from the repository root.
+Install cargo-deny 0.20.2 before pushing changes to a Cargo manifest, lockfile, or
+`deny.toml`. The pre-push hook runs `cargo deny --locked check` for both projects.
 Install Ruff and add `ruff` to your PATH before committing Python changes.
 CI uses Ruff 0.16.0. If `actionlint` is on your PATH, the pre-push hook
 validates workflow changes locally. Otherwise, CI runs that check.

@@ -43,6 +43,9 @@ cargo test --locked --all-targets
 cargo build --locked
 ```
 
+Use cargo-deny 0.20.2 to check dependencies. Run `cargo deny --locked check` for
+the application and see `lefthook.yml` for the vendored xattr command.
+
 For the CLI and core tests without GPUI, use:
 
 ```sh

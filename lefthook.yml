@@ -24,6 +24,11 @@ pre-commit:
 
 pre-push:
   commands:
+    cargo-deny:
+      glob: "{Cargo.toml,Cargo.lock,deny.toml,**/Cargo.toml,**/Cargo.lock,**/deny.toml}"
+      run: |
+        cargo deny --locked check &&
+          cargo deny --locked --manifest-path vendor/xattr/Cargo.toml --config vendor/xattr/deny.toml check
     clippy:
       glob: "{*.rs,Cargo.toml,Cargo.lock,rust-toolchain.toml,clippy.toml,.clippy.toml,.cargo/**,vendor/xattr/**}"
       run: cargo clippy --locked --all-targets -- -D warnings

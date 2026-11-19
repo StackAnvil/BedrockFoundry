@@ -1,0 +1,48 @@
+[graph]
+all-features = true
+
+[advisories]
+unmaintained = "workspace"
+unsound = "all"
+yanked = "deny"
+ignore = [
+    { id = "RUSTSEC-2026-0367", reason = "Foundry reads ZIP members and writes new files without applying archive permissions." },
+    { id = "RUSTSEC-2026-0368", reason = "Foundry rejects ZIP symlinks and never calls ZipArchive::extract." },
+    { id = "RUSTSEC-2026-0369", reason = "Foundry rejects ZIP symlinks and uses neither extraction API." },
+    { id = "RUSTSEC-2026-0429", reason = "Foundry rejects ZIP symlinks and never calls ZipArchive::extract." },
+    { id = "RUSTSEC-2026-0545", reason = "Foundry disables zip's aes-crypto feature and does not open password-protected entries." },
+    { id = "RUSTSEC-2026-0548", reason = "Foundry reads entries from the same ZipArchive it inspects and never uses the streaming ZIP API." },
+]
+
+[licenses]
+confidence-threshold = 0.93
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Zlib",
+]
+exceptions = [{ crate = "libfuzzer-sys", allow = ["NCSA"] }]
+
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-git = ["https://github.com/cinnabar-mc/bedrock-services"]

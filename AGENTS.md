@@ -24,6 +24,9 @@ cargo build --locked
 python3 -m unittest discover -s tools -p 'test_*.py'
 ```
 
+Install cargo-deny 0.20.2 for the pre-push checks. The hook checks both Cargo
+projects when a Cargo manifest, lockfile, or deny.toml changes.
+
 Run focused tests first. Test observable archive admission, entitlement checks,
 world activation, recovery, configuration, and process ownership. A unit test does
 not establish native rendering or multiplayer compatibility.
