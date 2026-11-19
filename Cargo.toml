@@ -14,7 +14,7 @@ desktop = ["dep:gpui", "dep:gpui-component", "dep:open"]
 
 [dependencies]
 anyhow = "1"
-aes = "0.8"
+aes = "0.9"
 base64 = "0.22"
 bedrock-services = { git = "https://github.com/cinnabar-mc/bedrock-services", rev = "cf4bfc5f59eaade09b0d075463e5f77b7d8c2e63" }
 cfb8 = "0.8"
