@@ -35,7 +35,7 @@ time = { version = "0.3", features = ["formatting"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "signal", "fs"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 zeroize = "1"
-zip = { version = "4", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 
 
 [profile.dev]
