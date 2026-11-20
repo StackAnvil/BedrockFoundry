@@ -17,7 +17,7 @@ anyhow = "1"
 aes = "0.8"
 base64 = "0.22"
 bedrock-services = { git = "https://github.com/cinnabar-mc/bedrock-services", rev = "cf4bfc5f59eaade09b0d075463e5f77b7d8c2e63" }
-cfb8 = "0.8"
+cfb8 = "0.9"
 clap = { version = "4", features = ["derive"] }
 directories = "6"
 fs2 = "0.4"
