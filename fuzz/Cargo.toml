@@ -21,7 +21,7 @@ tempfile = "3"
 time = "0.3"
 uuid = "1"
 zeroize = "1"
-zip = { version = "4", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 
 [[bin]]
 name = "zip_admission"
