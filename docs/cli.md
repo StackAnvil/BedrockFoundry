@@ -90,6 +90,31 @@ Import refuses an instance that already contains BDS. It preserves the managed
 configuration and does not replace an existing world or account allowlist.
 The desktop import expects the original `bedrock-server-VERSION.zip` filename.
 
+## Control a server from another program
+
+Programs such as the StackAnvil companion mod use two JSON forms:
+
+```sh
+bedrock-foundry server list --json
+bedrock-foundry server run SERVER_ID --json
+```
+
+`server list --json` prints an array. Each server has `id`, `name`, `port`,
+`version` (`null` before BDS is installed), `public`, and `addons` with each
+add-on's `id` and `name`.
+
+`server run --json` prints one JSON object per line:
+
+- `{"event":"log","line":"..."}` for each BDS console line.
+- `{"event":"ready","host":"127.0.0.1","port":19132}` once, when BDS reports
+  `Server started.` Players can join that address.
+- `{"event":"stopped"}` after BDS exits.
+
+Each input line is a console command. When input closes, Foundry stops the
+server. A controlling program that exits or crashes closes this input, so BDS
+does not keep running without an owner. Errors before start go to standard error
+with a nonzero exit code.
+
 ## Back up and configure access
 
 ```sh

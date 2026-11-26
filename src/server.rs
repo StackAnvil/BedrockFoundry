@@ -132,6 +132,47 @@ impl ServerConfig {
     }
 }
 
+/// The stable server fields that `server list --json` prints for other programs.
+#[derive(Debug, Serialize)]
+pub struct Summary {
+    pub id: Uuid,
+    pub name: String,
+    pub port: u16,
+    pub version: Option<String>,
+    pub public: bool,
+    pub addons: Vec<AddonSummary>,
+}
+#[derive(Debug, Serialize)]
+pub struct AddonSummary {
+    pub id: Uuid,
+    pub name: String,
+}
+impl From<&ServerConfig> for Summary {
+    fn from(config: &ServerConfig) -> Self {
+        Self {
+            id: config.id,
+            name: config.name.clone(),
+            port: config.port,
+            version: config.version.clone(),
+            public: config.public,
+            addons: config
+                .addons
+                .iter()
+                .map(|addon| AddonSummary {
+                    id: addon.id,
+                    name: addon.name.clone(),
+                })
+                .collect(),
+        }
+    }
+}
+
+/// BDS prints this line once its world is loaded and it accepts players.
+#[must_use]
+pub fn is_ready_line(line: &str) -> bool {
+    line.trim_end().ends_with("Server started.")
+}
+
 #[must_use]
 pub fn home(root: &Path, id: Uuid) -> PathBuf {
     root.join("servers").join(id.to_string())

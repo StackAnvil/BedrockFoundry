@@ -92,7 +92,11 @@ enum MarketplaceCommand {
 }
 #[derive(Subcommand)]
 enum ServerCommand {
-    List,
+    List {
+        /// Print the servers as a JSON array.
+        #[arg(long)]
+        json: bool,
+    },
     Create {
         name: String,
         #[arg(long, default_value_t = 19132)]
@@ -115,6 +119,9 @@ enum ServerCommand {
     /// Run BDS in the foreground. Enter console commands or press Ctrl+C to stop.
     Run {
         id: Uuid,
+        /// For programs: print JSON Lines events, and stop the server when input closes.
+        #[arg(long)]
+        json: bool,
     },
     Backup {
         id: Uuid,
@@ -130,6 +137,75 @@ enum ServerCommand {
     Folder {
         id: Uuid,
     },
+}
+/// Runs a server until it exits. In JSON mode, closing standard input stops the server, so a
+/// controlling program that exits or crashes cannot leave BDS running without an owner.
+async fn run_server(backend: &Backend, id: Uuid, json: bool) -> Result<()> {
+    let config = backend.server(id)?;
+    let port = config.port;
+    let processes = backend.processes.clone();
+    let root = backend.store.root.clone();
+    tokio::task::spawn_blocking(move || processes.start(&root, &config)).await??;
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    std::thread::spawn(move || {
+        for line in std::io::stdin()
+            .lock()
+            .lines()
+            .map_while(std::result::Result::ok)
+        {
+            if tx.send(line).is_err() {
+                break;
+            }
+        }
+    });
+    let emit = |event: serde_json::Value| -> Result<()> {
+        let mut out = std::io::stdout().lock();
+        writeln!(out, "{event}")?;
+        out.flush()?;
+        Ok(())
+    };
+    let mut last = Vec::new();
+    let mut ready = false;
+    let mut tick = tokio::time::interval(std::time::Duration::from_millis(100));
+    let mut input_open = true;
+    loop {
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {stop(backend, id).await?; break;},
+            command = rx.recv(), if input_open => match command {
+                Some(text) => backend.processes.command(id, &text)?,
+                None if json => {stop(backend, id).await?; input_open = false;},
+                None => input_open = false,
+            },
+            _ = tick.tick() => {
+                let logs = backend.processes.logs(id);
+                let overlap = last.len().min(logs.len());
+                let start = (0..=overlap).rev().find(|n| last[last.len() - n..] == logs[..*n]).unwrap_or(0);
+                for line in &logs[start..] {
+                    if json {
+                        emit(serde_json::json!({"event": "log", "line": line}))?;
+                        if !ready && server::is_ready_line(line) {
+                            ready = true;
+                            emit(serde_json::json!({"event": "ready", "host": "127.0.0.1", "port": port}))?;
+                        }
+                    } else {
+                        println!("{line}");
+                    }
+                }
+                std::io::stdout().flush()?;
+                last = logs;
+                if !backend.processes.running(id)? {break;}
+            }
+        }
+    }
+    if json {
+        emit(serde_json::json!({"event": "stopped"}))?;
+    }
+    Ok(())
+}
+/// Stopping waits up to ten seconds for BDS to save and exit, so it runs off the async runtime.
+async fn stop(backend: &Backend, id: Uuid) -> Result<()> {
+    let processes = backend.processes.clone();
+    tokio::task::spawn_blocking(move || processes.stop(id)).await?
 }
 fn main() -> std::process::ExitCode {
     // An existing global subscriber can continue to handle logging.
@@ -207,7 +283,11 @@ fn run() -> Result<()> {
                 }
             },
             Command::Server{action}=>match action {
-                ServerCommand::List=>for config in backend.servers()? {println!("{}  {}  port {}  {}",config.id,config.name,config.port,config.version.as_deref().unwrap_or("BDS not installed"));},
+                ServerCommand::List{json}=>{
+                    let servers=backend.servers()?;
+                    if json {println!("{}",serde_json::to_string_pretty(&servers.iter().map(server::Summary::from).collect::<Vec<_>>())?);}
+                    else {for config in servers {println!("{}  {}  port {}  {}",config.id,config.name,config.port,config.version.as_deref().unwrap_or("BDS not installed"));}}
+                },
                 ServerCommand::Create{name,port}=>{let server=backend.create(name,port)?;println!("{}",server.id);},
                 ServerCommand::Install{id}=>{backend.provision(id).await?;println!("BDS installed");},
                 ServerCommand::Import{id,archive,version}=>{let mut config=backend.server(id)?;let metadata=tokio::fs::metadata(&archive).await?;anyhow::ensure!(metadata.len()<=bedrock_foundry::archive::MAX_ARCHIVE as u64,"Server archive exceeds the size limit");let bytes=tokio::fs::read(archive).await?;let root=backend.store.root.clone();tokio::task::spawn_blocking(move || server::import_distribution(&root,&mut config,&bytes,version)).await??;println!("BDS imported");},
@@ -215,28 +295,7 @@ fn run() -> Result<()> {
                 ServerCommand::Backup{id}=>println!("{}",backend.backup(id)?.display()),
                 ServerCommand::Expose{id,local,address}=>{let mut config=backend.server(id)?;config.public = !local;config.public_address=address;backend.update(&config)?;println!("Network binding: {}:{}",if local{"127.0.0.1"}else{"0.0.0.0"},config.port);},
                 ServerCommand::Folder{id}=>println!("{}",backend.folder(id).display()),
-                ServerCommand::Run{id}=>{
-                    let config=backend.server(id)?;
-                    let processes=backend.processes.clone();
-                    let root=backend.store.root.clone();
-                    tokio::task::spawn_blocking(move || processes.start(&root,&config)).await??;
-                    let (tx,mut rx)=tokio::sync::mpsc::unbounded_channel();
-                    std::thread::spawn(move || {for line in std::io::stdin().lock().lines().map_while(std::result::Result::ok) {if tx.send(line).is_err(){break;}}});
-                    let mut last=Vec::new();let mut tick=tokio::time::interval(std::time::Duration::from_millis(100));let mut input_open=true;
-                    loop {
-                        tokio::select! {
-                            _=tokio::signal::ctrl_c()=>{let processes=backend.processes.clone();tokio::task::spawn_blocking(move || processes.stop(id)).await??;break;},
-                            command=rx.recv(),if input_open=>{match command {Some(text)=>backend.processes.command(id,&text)?,None=>input_open=false}},
-                            _=tick.tick()=>{
-                                let logs=backend.processes.logs(id);
-                                let overlap=last.len().min(logs.len());let start=(0..=overlap).rev().find(|n|last[last.len()-n..]==logs[..*n]).unwrap_or(0);
-                                for line in &logs[start..]{println!("{line}");}
-                                std::io::stdout().flush()?;last=logs;
-                                if !backend.processes.running(id)?{break;}
-                            }
-                        }
-                    }
-                },
+                ServerCommand::Run{id,json}=>run_server(&backend,id,json).await?,
             },
         }
         Ok(())
