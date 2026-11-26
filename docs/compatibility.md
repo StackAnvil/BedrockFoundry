@@ -11,6 +11,12 @@ and normal shutdown. A CPU profile recorded the original add-on JavaScript
 executing. The accepted run contained no content or script errors. Native client
 pack delivery, rendering, guide forms, and multiplayer were not tested.
 
+On Linux BDS 1.26.66.1, a Minecraft Java Edition client with the StackAnvil
+Foundry companion joined a Foundry server running this add-on. The client
+received its resource pack, the add-on's script ran, and its guide and custom
+items appeared. Stopping the server from the client, and closing the client,
+both shut BDS down cleanly. This does not test the native Bedrock client.
+
 The automatic installer also downloaded and installed official BDS 1.26.63.1.
 Each add-on still needs a matching server version and working script modules.
 One successful free add-on does not establish compatibility with every paid

@@ -59,9 +59,6 @@ https://github.com/user-attachments/assets/47a2778c-5fbc-4e92-b48a-a22ab398ef7b
 
 ## Run the app
 
-Build from `main` for the Marketplace browser, Minecoin purchases, and redesigned
-desktop. The downloadable v0.1.0 release uses the original interface shown in the demos.
-
 Download the Linux or Windows archive from [Releases](https://github.com/StackAnvil/BedrockFoundry/releases/latest).
 Extract it and run `bedrock-foundry` on Linux or `bedrock-foundry.exe` on Windows.
 The [release guide](docs/releases.md#verify-a-download) explains checksum verification.

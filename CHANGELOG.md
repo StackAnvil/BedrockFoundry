@@ -2,11 +2,14 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-26
+
 - Browse and search public Marketplace listings with thumbnails, details, and paging.
 - Review Minecoin balances and confirm standalone add-on purchases in the desktop or CLI.
 - Re-check purchase prices, accounts, and packs, and retain uncertain attempts across restarts.
 - Redesign the desktop with guided setup, a server rail, dedicated management tabs, and purchase dialogs.
 - Add `server list --json` and `server run --json` so other programs can start, join, and stop servers.
+- Update `url` to 2.5.9 for RUSTSEC-2026-0592.
 
 ## [0.1.0] - 2026-11-14
 
